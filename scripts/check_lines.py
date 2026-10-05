@@ -6,7 +6,10 @@
 # Single-page tool: only checks page 1 (ruled paper is generated single-page).
 import argparse
 
-import pymupdf
+try:
+    import pymupdf  # PyMuPDF >= 1.24.3
+except ImportError:  # legacy package name
+    import fitz as pymupdf
 
 MM_PER_PT = 25.4 / 72.0
 
@@ -20,9 +23,10 @@ def check_lines(path, dpi, spacing, margin):
     ph_mm = page.rect.height * MM_PER_PT
     x1 = int(margin / pw_mm * w) + 5
     x2 = int((pw_mm - margin) / pw_mm * w) - 5
-    # same symmetric-slack formula as ruled_paper.py: slack centered top/bottom
+    # same symmetric-slack formula as ruled_paper.py (mm domain + epsilon, so boundary
+    # parameter combos can't drift apart by one line and false-positive MISSING)
     avail = ph_mm - 2 * margin
-    n_expected = int(avail // spacing) + 1
+    n_expected = int(avail / spacing + 1e-9) + 1
     slack = avail - (n_expected - 1) * spacing
     y_start = margin + slack / 2.0
     problems = []  # (kind, line_no, y_mm, detail)
@@ -53,13 +57,23 @@ def check_lines(path, dpi, spacing, margin):
         inner = [(a, b) for a, b in gaps if a > 8 and b < total - 8 and (b - a) <= 0.8 * total]
         if missing:
             problems.append(("MISSING", n_lines, round(y_mm, 1), missing))
-        elif inner:
-            problems.append(("GAP", n_lines, round(y_mm, 1), inner))
+        else:
+            if inner:
+                problems.append(("GAP", n_lines, round(y_mm, 1), inner))
+            # ends: the line must reach both scan edges — inner-gap filter intentionally
+            # ignores <8px edge gaps, so trimmed ends need their own check (10px tol)
+            lit = [i for i, v in enumerate(mins) if v < 240]
+            if lit:
+                if lit[0] > 10:
+                    problems.append(("SHORT-L", n_lines, round(y_mm, 1), lit[0]))
+                if lit[-1] < total - 11:
+                    problems.append(("SHORT-R", n_lines, round(y_mm, 1), total - 1 - lit[-1]))
         y_mm += spacing
     doc.close()
     if problems:
         miss = [p for p in problems if p[0] == "MISSING"]
         gaps_p = [p for p in problems if p[0] == "GAP"]
+        shorts = [p for p in problems if p[0].startswith("SHORT")]
         if gaps_p:
             print(f"BREAKS: {len(gaps_p)}/{n_lines} lines have inner gaps:")
             for _, ln, ymm, g in gaps_p:
@@ -68,6 +82,11 @@ def check_lines(path, dpi, spacing, margin):
             print(f"MISSING: {len(miss)}/{n_lines} lines absent (scan band >80% blank):")
             for _, ln, ymm, g in miss:
                 print(f"  line#{ln} y={ymm}mm white_px={g}")
+        if shorts:
+            print(f"SHORT: {len(shorts)} line end(s) do not reach the margin:")
+            for kind, ln, ymm, g in shorts:
+                side = "left" if kind.endswith("L") else "right"
+                print(f"  line#{ln} y={ymm}mm {side} end short by {g}px")
         return 1
     print(f"all {n_lines} lines present and continuous - PDF data intact "
           f"(if screen shows breaks, they come from rendering, not this file)")

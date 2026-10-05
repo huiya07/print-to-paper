@@ -1,11 +1,12 @@
-﻿# 打印任意 PDF 到本机打印机 — 单入口
+﻿#Requires -Version 7.0
+# 打印任意 PDF 到本机打印机 — 单入口
 # 流程: python 光栅化 PDF->PNG (print_pdf.py) -> .NET System.Drawing.PrintDocument 打印
 # 为什么 .NET: win32ui 位图路线死于黑白激光 1bpp 打印 DC 不吃 24bpp 位图 (2026-10-05 实测)
 param(
     [Parameter(Mandatory = $true)][string]$Pdf,
     # 不传则取系统默认打印机 (2026-10-05 审计后改, Brother DCP-7057 只是实测环境示例)
     [string]$Printer = "",
-    [string]$Pages = "all",
+    [ValidatePattern('^(all|\d+(-\d+)?)$')][string]$Pages = "all",
     [int]$Copies = 1,
     [int]$Dpi = 300,
     # DotNet = 光栅化后 System.Drawing 打 (位图, 稳); Sumatra = 矢量直打 (质量更好, 需装 SumatraPDF)
@@ -17,8 +18,16 @@ param(
 
 $ErrorActionPreference = "Stop"
 $py = Join-Path $PSScriptRoot "print_pdf.py"
-$SumatraExe = "$env:LOCALAPPDATA\SumatraPDF\SumatraPDF.exe"
-$printerExplicit = $PSBoundParameters.ContainsKey('Printer')
+# 查找顺序: PATH 上的 SumatraPDF -> 默认安装位 -> Program Files
+$SumatraExe = $null
+foreach ($cand in @((Get-Command SumatraPDF -ErrorAction SilentlyContinue).Source,
+                    "$env:LOCALAPPDATA\SumatraPDF\SumatraPDF.exe",
+                    "$env:ProgramFiles\SumatraPDF\SumatraPDF.exe")) {
+    if ($cand -and (Test-Path $cand)) { $SumatraExe = $cand; break }
+}
+# 参数互斥提醒: -Scale 只作用于 Sumatra, -Dpi 只作用于 DotNet
+if ($Engine -eq "DotNet" -and $Scale -ne "none") { Write-Warning "-Scale only applies to -Engine Sumatra (ignored for DotNet)" }
+if ($Engine -eq "Sumatra" -and $PSBoundParameters.ContainsKey('Dpi')) { Write-Warning "-Dpi only applies to -Engine DotNet (Sumatra rasterizes at driver resolution)" }
 
 # -Printer 不传 → 系统默认打印机
 # 注意: pwsh7 的 [PrinterSettings]::Default 静态属性是 null (.NET Core 未实现), 别用 — 走 CIM
@@ -88,6 +97,13 @@ if ($DryRun) {
     $probe = New-Object System.Drawing.Printing.PrintDocument
     $probe.PrinterSettings.PrinterName = $Printer
     $valid = $probe.PrinterSettings.IsValid
+    # PaperSize reads the device context and throws InvalidPrinterException on an
+    # invalid printer — bail out before touching it so "valid=False" actually prints
+    if (-not $valid) {
+        "printer '$Printer' valid=False (unknown printer - check -Printer name)"
+        $probe.Dispose()
+        exit 1
+    }
     $paper = $probe.DefaultPageSettings.PaperSize
     # 拿不到就跳过 — 输出 PaperSize + 推算 scale, 驱动纸张和 PDF 不一致时提醒
     $paperPtW = [math]::Round($paper.Width * 72 / 100)

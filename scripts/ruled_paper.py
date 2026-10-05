@@ -7,6 +7,8 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from reportlab.lib.units import mm
 
+H_MM = A4[1] / mm  # page height in mm (297)
+
 
 def main():
     ap = argparse.ArgumentParser(description="Generate ruled notebook paper PDF (A4)")
@@ -18,7 +20,14 @@ def main():
     ap.add_argument("--margin", type=float, default=15.0, help="page margin mm (default 15)")
     ap.add_argument("--rgb", default=None,
                     help="override color as R,G,B 0-1 e.g. 0.6,0.7,0.85 (light blue)")
+    ap.add_argument("--calibrate", action="store_true",
+                    help="margin box + corner crosses instead of ruled lines (measure print margins with a ruler)")
     args = ap.parse_args()
+
+    if args.spacing <= 0:
+        ap.error("--spacing must be > 0")
+    if 2 * args.margin >= H_MM - args.spacing:
+        ap.error(f"--margin {args.margin}mm too large for A4 {H_MM}mm with spacing {args.spacing}mm")
 
     try:
         gray = float(args.gray)
@@ -43,21 +52,35 @@ def main():
     c.setLineWidth(args.pt)
 
     x1, x2 = args.margin * mm, W - args.margin * mm
-    # top/bottom symmetric: page height between margins is rarely an exact multiple of
-    # spacing (A4/15mm/8mm -> 267mm = 33*8 + 3) — center the slack instead of dropping
-    # it all at the bottom (previously top 15mm / bottom 18mm)
-    avail = H - 2 * args.margin * mm
-    n = int(avail // (args.spacing * mm)) + 1
-    slack = avail - (n - 1) * args.spacing * mm
-    top = args.margin * mm + slack / 2.0  # distance of first line from top edge
-    y = H - top
+    if args.calibrate:
+        # margin box + corner crosses: ruler the box edge to paper edge -> should be --margin
+        m = args.margin * mm
+        y1, y2 = m, H - m
+        c.rect(m, y1, W - m, y2)
+        arm = 4 * mm  # cross arm length
+        for cx, cy in ((m, y1), (W - m, y1), (m, y2), (W - m, y2)):
+            c.line(cx - arm, cy, cx + arm, cy)
+            c.line(cx, cy - arm, cx, cy + arm)
+        c.showPage()
+        c.save()
+        print(f"OK {args.out} calibrate-box margin={args.margin}mm (all 4 edges; corners = crosses) "
+              f"gray={gray} pt={args.pt}")
+        return
+    # top/bottom symmetric — compute in the mm domain with an epsilon so the generator
+    # and check_lines.py always agree on the line count (pt-division could drift by 1
+    # on boundary parameter combos, e.g. margin 13.5 / spacing 10)
+    avail = H_MM - 2 * args.margin
+    n = int(avail / args.spacing + 1e-9) + 1
+    slack = avail - (n - 1) * args.spacing
+    top = args.margin + slack / 2.0  # distance of first line from top edge (mm)
+    y = H - top * mm
     for _ in range(n):
         c.line(x1, y, x2, y)
         y -= args.spacing * mm
     c.showPage()
     c.save()
     print(f"OK {args.out} lines={n} spacing={args.spacing}mm gray={gray} pt={args.pt} "
-          f"top={top / mm:.1f}mm bottom={slack / 2 / mm + args.margin:.1f}mm (symmetric)")
+          f"top={top:.1f}mm bottom={args.margin + slack / 2:.1f}mm (symmetric)")
 
 
 if __name__ == "__main__":

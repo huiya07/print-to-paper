@@ -25,7 +25,14 @@ def main():
         print(f"ERROR no such file: {args.pdf}", file=sys.stderr, flush=True)
         sys.exit(1)
 
-    doc = pymupdf.open(args.pdf)
+    try:
+        doc = pymupdf.open(args.pdf)
+    except Exception as e:
+        print(f"ERROR cannot open PDF: {args.pdf} ({e})", file=sys.stderr, flush=True)
+        sys.exit(1)
+    if doc.needs_pass:
+        print(f"ERROR encrypted PDF (password required): {args.pdf}", file=sys.stderr, flush=True)
+        sys.exit(1)
     if doc.page_count == 0:
         print(f"ERROR empty PDF: {args.pdf}", file=sys.stderr, flush=True)
         sys.exit(1)
@@ -53,7 +60,8 @@ def main():
         page_list = list(range(a - 1, b))
 
     if args.dry_run:
-        p0 = doc[0]
+        # report the FIRST SELECTED page, not always page 1 (--pages 3 may differ in size)
+        p0 = doc[page_list[0]]
         print(f"DRY-RUN pdf={args.pdf} pages={len(page_list)}/{doc.page_count} "
               f"page0={p0.rect.width:.0f}x{p0.rect.height:.0f}pt dpi={args.dpi}")
         doc.close()

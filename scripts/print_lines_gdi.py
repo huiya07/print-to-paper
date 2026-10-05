@@ -5,6 +5,7 @@
 # Edge headless failed twice — see SKILL.md §7.
 # 0.5 gray on a 1bpp laser = driver halftone dots; fine at 6px pen, look changes at thinner pens.
 import argparse
+import re
 import sys
 
 import win32con
@@ -22,6 +23,8 @@ def main():
     ap.add_argument("--gray", type=float, default=0.5, help="line gray 0-1")
     ap.add_argument("--pt", type=float, default=0.75, help="pen width pt")
     ap.add_argument("--margin", type=float, default=15.0, help="page margin mm")
+    ap.add_argument("--calibrate", action="store_true",
+                    help="margin box + corner crosses instead of ruled lines (measure print margins)")
     ap.add_argument("--dry-run", action="store_true", help="print plan only, no job")
     args = ap.parse_args()
 
@@ -31,6 +34,12 @@ def main():
         except Exception:
             print("ERROR no system default printer; pass --printer", flush=True)
             sys.exit(1)
+        # mirror print_pdf.ps1: auto-resolved virtual printer -> error, explicit -> warn
+        if re.search('Print to PDF|OneNote|XPS', args.printer):
+            print(f"ERROR system default printer is virtual: '{args.printer}' - pass --printer <name>", flush=True)
+            sys.exit(1)
+    elif re.search('Print to PDF|OneNote|XPS', args.printer):
+        print(f"WARNING printing to a virtual printer: {args.printer}", flush=True)
 
     # LOCAL alone misses network/shared printers -> also enumerate connections
     names = [p[2] for p in win32print.EnumPrinters(
@@ -43,8 +52,9 @@ def main():
     gray_val = max(0, min(255, int(round(args.gray * 255))))
     color = (gray_val << 16) | (gray_val << 8) | gray_val
     # dry-run can't query paper caps without a DC — estimate on A4, real print reports actual
-    n_est = int((PAGE_H - 2 * args.margin) // args.spacing) + 1
-    plan = (f"printer={args.printer} lines~{n_est}(A4 est) spacing={args.spacing}mm "
+    n_est = int((PAGE_H - 2 * args.margin) / args.spacing + 1e-9) + 1
+    what = "calibrate-box" if args.calibrate else f"lines~{n_est}(A4 est)"
+    plan = (f"printer={args.printer} {what} spacing={args.spacing}mm "
             f"gray={gray_val} pen={args.pt}pt margins={args.margin}mm single-sided(driver)")
     if args.dry_run:
         print(f"DRY-RUN {plan}", flush=True)
@@ -60,8 +70,9 @@ def main():
     try:
         dpi_x = dc.GetDeviceCaps(win32con.LOGPIXELSX)
         dpi_y = dc.GetDeviceCaps(win32con.LOGPIXELSY)
-        # actual paper in device px + hard-printable-area offset: DC origin is the
-        # printable-area top-left, NOT the paper corner — add offsets to lay out from paper edge
+        # DC origin = printable-area top-left (dotnet DefaultPrintController translates
+        # -PHYSICALOFFSET to reach the paper corner, proving the raw origin is NOT the
+        # paper corner). Paper corner sits at (-off_x, -off_y) in DC coords.
         phys_w = dc.GetDeviceCaps(win32con.PHYSICALWIDTH)
         phys_h = dc.GetDeviceCaps(win32con.PHYSICALHEIGHT)
         off_x = dc.GetDeviceCaps(win32con.PHYSICALOFFSETX)
@@ -70,11 +81,11 @@ def main():
         paper_h_mm = phys_h / dpi_y * 25.4
         pen_w = max(1, int(round(args.pt / 72.0 * dpi_x)))
 
-        def mmx(v):  # v mm from paper edge -> DC x
-            return off_x + int(round(v / 25.4 * dpi_x))
+        def mmx(v):  # v mm from paper edge -> DC x: subtract offset, NOT add (v+off = 2x hard margin)
+            return int(round(v / 25.4 * dpi_x)) - off_x
 
         def mmy(v):
-            return off_y + int(round(v / 25.4 * dpi_y))
+            return int(round(v / 25.4 * dpi_y)) - off_y
 
         started = False
         try:
@@ -92,21 +103,44 @@ def main():
                 sys.exit(1)
 
             dc.StartPage()
-            old_pen = dc.SelectObject(win32ui.CreatePen(win32con.PS_SOLID, pen_w, color))
+            # hold a python reference: a pen selected into the DC must not be GC'd mid-draw
+            pen = win32ui.CreatePen(win32con.PS_SOLID, pen_w, color)
+            old_pen = dc.SelectObject(pen)
             sent = 0
             # lay out on actual paper size (driver default), fall back to A4 if caps are 0
             pw = paper_w_mm if paper_w_mm > 1 else PAGE_W
             ph = paper_h_mm if paper_h_mm > 1 else PAGE_H
-            y = args.margin
-            while y <= ph - args.margin + 0.01:
-                dc.MoveTo(mmx(args.margin), mmy(y))
-                dc.LineTo(mmx(pw - args.margin), mmy(y))
-                sent += 1
-                y += args.spacing
-            dc.SelectObject(old_pen)  # restore pen
+            if args.calibrate:
+                # margin box + corner crosses — ruler each box edge to the paper edge
+                x1, x2 = args.margin, pw - args.margin
+                y1, y2 = args.margin, ph - args.margin
+                for a, b in (((x1, y1), (x2, y1)), ((x2, y1), (x2, y2)),
+                             ((x2, y2), (x1, y2)), ((x1, y2), (x1, y1))):
+                    dc.MoveTo(mmx(a[0]), mmy(a[1]))
+                    dc.LineTo(mmx(b[0]), mmy(b[1]))
+                arm = 4.0
+                for cx, cy in ((x1, y1), (x2, y1), (x1, y2), (x2, y2)):
+                    dc.MoveTo(mmx(cx - arm), mmy(cy))
+                    dc.LineTo(mmx(cx + arm), mmy(cy))
+                    dc.MoveTo(mmx(cx), mmy(cy - arm))
+                    dc.LineTo(mmx(cx), mmy(cy + arm))
+                sent = 4  # 4 box edges
+            else:
+                # symmetric slack centering — same formula as ruled_paper.py / check_lines.py
+                avail = ph - 2 * args.margin
+                n = int(avail / args.spacing + 1e-9) + 1
+                y = args.margin + (avail - (n - 1) * args.spacing) / 2.0
+                for _ in range(n):
+                    dc.MoveTo(mmx(args.margin), mmy(y))
+                    dc.LineTo(mmx(pw - args.margin), mmy(y))
+                    sent += 1
+                    y += args.spacing
+            dc.SelectObject(old_pen)  # restore pen; keep python ref till here (PyCPen has no DeleteObject)
+            del pen
             dc.EndPage()
             dc.EndDoc()
-            print(f"OK sent {sent} lines (paper {pw:.0f}x{ph:.0f}mm off {off_x},{off_y}px) ({plan})", flush=True)
+            kind = "calibrate box" if args.calibrate else f"{sent} lines"
+            print(f"OK sent {kind} (paper {pw:.0f}x{ph:.0f}mm off {off_x},{off_y}px) ({plan})", flush=True)
         except Exception:
             # without AbortDoc a crashed draw leaves a stuck job in the spooler
             if started:

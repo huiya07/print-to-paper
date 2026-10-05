@@ -63,6 +63,8 @@ pwsh -File print_pdf.ps1 -Pdf "file.pdf" -Engine Sumatra
 
 **流程 (烧纸不可逆, 强制)**: 真打前**必须先 `-DryRun`** — 确认页数/份数/打印机解析无误后再去掉跑真打; 带 `-Copies` 时尤其必跑。`-Printer` 不传时取**系统默认打印机**, 默认是虚拟打印机 (Print to PDF/OneNote/XPS) 时直接报错, 显式传的只警告。
 
+**边距标定**: `ruled_paper.py --calibrate` (或 `print_lines_gdi.py --calibrate`) 出"距边 margin 的矩形框+四角十字"页 — 三个引擎各打一张, 量四边到框线距离应全等于 margin (默认 15mm), 一次验证全部边距/偏移/缩放链路。
+
 **工程细节 (都是踩出来的)**:
 - pwsh7 程序集名是 `System.Drawing.Common` — `System.Drawing.Printing` 不是程序集名, Add-Type 会报"找不到路径"
 - 成功信号: DotNet 引擎同步返回; Sumatra 是 GUI 进程 `&` 不等待、`$LASTEXITCODE` 为 null — **以 spooler 收到新 job 为准**: 启动前记下当前最大 job Id, 15s 内出现 **Id 更大** 的 job = 成功, 该 job 消失 = 该份传完 (按 Id 归属, 别人排队/卡住的作业不误判)
