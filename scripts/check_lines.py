@@ -5,6 +5,7 @@
 # 2026-10-06 audit: fully-missing line used to pass (gap (0,w) filtered by inner) -> now flagged.
 # Single-page tool: only checks page 1 (ruled paper is generated single-page).
 import argparse
+import sys
 
 try:
     import pymupdf  # PyMuPDF >= 1.24.3
@@ -15,7 +16,18 @@ MM_PER_PT = 25.4 / 72.0
 
 
 def check_lines(path, dpi, spacing, margin):
-    doc = pymupdf.open(path)
+    if spacing <= 0:
+        print("ERROR --spacing must be > 0", file=sys.stderr, flush=True)
+        return 1
+    try:
+        doc = pymupdf.open(path)
+    except Exception as e:
+        print(f"ERROR cannot open PDF: {path} ({e})", file=sys.stderr, flush=True)
+        return 1
+    if doc.needs_pass:
+        print(f"ERROR encrypted PDF (password required): {path}", file=sys.stderr, flush=True)
+        doc.close()
+        return 1
     page = doc[0]
     pix = page.get_pixmap(matrix=pymupdf.Matrix(dpi / 72.0, dpi / 72.0))
     w, h, s, stride, n = pix.width, pix.height, pix.samples, pix.stride, pix.n
@@ -26,6 +38,10 @@ def check_lines(path, dpi, spacing, margin):
     # same symmetric-slack formula as ruled_paper.py (mm domain + epsilon, so boundary
     # parameter combos can't drift apart by one line and false-positive MISSING)
     avail = ph_mm - 2 * margin
+    if avail <= 0:
+        print(f"ERROR --margin {margin}mm too large for page {ph_mm:.0f}mm", file=sys.stderr, flush=True)
+        doc.close()
+        return 1
     n_expected = int(avail / spacing + 1e-4) + 1
     slack = avail - (n_expected - 1) * spacing
     y_start = margin + slack / 2.0

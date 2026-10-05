@@ -10,6 +10,7 @@ import sys
 
 import win32con
 import win32print
+import win32serviceutil
 import win32ui
 
 PAGE_W = 210.0
@@ -27,6 +28,14 @@ def main():
                     help="margin box + corner crosses instead of ruled lines (measure print margins)")
     ap.add_argument("--dry-run", action="store_true", help="print plan only, no job")
     args = ap.parse_args()
+
+    if args.spacing <= 0:
+        ap.error("--spacing must be > 0")
+    # Spooler preflight: with it stopped, EnumPrinters returns empty and the script would
+    # misleadingly claim the (correctly named) printer "not found"
+    if win32serviceutil.QueryServiceStatus("Spooler")[1] != 4:  # 4 = SERVICE_RUNNING
+        print("ERROR Spooler not running - see SKILL.md §1/§5", flush=True)
+        sys.exit(1)
 
     if not args.printer:
         try:
@@ -87,6 +96,14 @@ def main():
         def mmy(v):
             return int(round(v / 25.4 * dpi_y)) - off_y
 
+        # resolve paper size and validate margin BEFORE StartDoc — a return after
+        # StartDoc/StartPage would leave a half-open job in the spooler (blank feed)
+        pw = paper_w_mm if paper_w_mm > 1 else PAGE_W
+        ph = paper_h_mm if paper_h_mm > 1 else PAGE_H
+        if ph - 2 * args.margin <= 0:
+            print(f"ERROR --margin {args.margin}mm too large for paper {ph:.0f}mm", flush=True)
+            return
+
         started = False
         try:
             # StartDoc: string form first; tuple fallback (pywin32 docstrings are all None)
@@ -107,9 +124,6 @@ def main():
             pen = win32ui.CreatePen(win32con.PS_SOLID, pen_w, color)
             old_pen = dc.SelectObject(pen)
             sent = 0
-            # lay out on actual paper size (driver default), fall back to A4 if caps are 0
-            pw = paper_w_mm if paper_w_mm > 1 else PAGE_W
-            ph = paper_h_mm if paper_h_mm > 1 else PAGE_H
             if args.calibrate:
                 # margin box + corner crosses — ruler each box edge to the paper edge
                 x1, x2 = args.margin, pw - args.margin

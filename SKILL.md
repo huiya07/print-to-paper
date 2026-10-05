@@ -51,12 +51,13 @@ python ~/.claude/skills/print-to-paper/scripts/ruled_paper.py --out out.pdf --sp
 
 ```powershell
 # 引擎1 DotNet (默认): python 光栅化 300dpi PNG → System.Drawing.PrintDocument
-pwsh -File print_pdf.ps1 -Pdf "file.pdf"                        # 全部页
-pwsh -File print_pdf.ps1 -Pdf "file.pdf" -Pages 1-3 -Copies 2
-pwsh -File print_pdf.ps1 -Pdf "file.pdf" -DryRun                # 只验参数+打印机
+# 注意: pwsh -File 不展开 ~, 用 $HOME 或完整路径 (裸文件名依赖 cwd, 别照抄)
+pwsh -File $HOME\.claude\skills\print-to-paper\scripts\print_pdf.ps1 -Pdf "file.pdf"                        # 全部页
+pwsh -File $HOME\.claude\skills\print-to-paper\scripts\print_pdf.ps1 -Pdf "file.pdf" -Pages 1-3 -Copies 2
+pwsh -File $HOME\.claude\skills\print-to-paper\scripts\print_pdf.ps1 -Pdf "file.pdf" -DryRun                # 只验参数+打印机
 
 # 引擎2 Sumatra (矢量, 质量更好): 官方 CLI 直打, 不光栅化
-pwsh -File print_pdf.ps1 -Pdf "file.pdf" -Engine Sumatra
+pwsh -File $HOME\.claude\skills\print-to-paper\scripts\print_pdf.ps1 -Pdf "file.pdf" -Engine Sumatra
 ```
 
 选型: 日常/批量用默认 **DotNet** (稳, 无外部依赖); 线条图/小字要矢量质量用 **Sumatra**。两引擎均实测出纸; 10-06 边距/缩放改动经标定页量尺确认 (四边 15mm)。

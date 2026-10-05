@@ -24,7 +24,7 @@ GitHub 上的 agent 打印 skill 几乎是空白 (2026-10-05 检索: 最大办�
 | 横线纸生成 (行距/灰度/线宽参数化) | `scripts/ruled_paper.py` |
 | 横线直画 (GDI, 跳过 PDF 最短路径) | `scripts/print_lines_gdi.py` |
 | 断线定层 (光栅化扫描) | `scripts/check_lines.py --pdf x.pdf` |
-| 三层诊断 + 8 条踩坑档案 | [SKILL.md](SKILL.md) |
+| 三层诊断 + 10 条踩坑档案 | [SKILL.md](SKILL.md) |
 
 ## 安装 / Install
 
@@ -40,11 +40,11 @@ git clone https://github.com/huiya07/print-to-paper.git ~/.claude/skills/print-t
 
 ```powershell
 # 打印任意 PDF (默认 .NET 引擎, 先 dry-run 验参数)
-pwsh -File ~/.claude/skills/print-to-paper/scripts/print_pdf.ps1 -Pdf doc.pdf -DryRun
-pwsh -File ~/.claude/skills/print-to-paper/scripts/print_pdf.ps1 -Pdf doc.pdf
+pwsh -File $HOME\.claude\skills\print-to-paper\scripts\print_pdf.ps1 -Pdf doc.pdf -DryRun
+pwsh -File $HOME\.claude\skills\print-to-paper\scripts\print_pdf.ps1 -Pdf doc.pdf
 
 # 矢量质量
-pwsh -File ~/.claude/skills/print-to-paper/scripts/print_pdf.ps1 -Pdf doc.pdf -Engine Sumatra
+pwsh -File $HOME\.claude\skills\print-to-paper\scripts\print_pdf.ps1 -Pdf doc.pdf -Engine Sumatra
 
 # 生成横线纸 (A4 8mm 行距)
 python ~/.claude/skills/print-to-paper/scripts/ruled_paper.py --out ruled.pdf

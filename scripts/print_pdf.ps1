@@ -7,8 +7,8 @@ param(
     # 不传则取系统默认打印机 (2026-10-05 审计后改, Brother DCP-7057 只是实测环境示例)
     [string]$Printer = "",
     [ValidatePattern('^(all|\d+(-\d+)?)$')][string]$Pages = "all",
-    [int]$Copies = 1,
-    [int]$Dpi = 300,
+    [ValidateRange(1, 99)][int]$Copies = 1,
+    [ValidateRange(72, 1200)][int]$Dpi = 300,
     # DotNet = 光栅化后 System.Drawing 打 (位图, 稳); Sumatra = 矢量直打 (质量更好, 需装 SumatraPDF)
     [ValidateSet("DotNet", "Sumatra")][string]$Engine = "DotNet",
     # Sumatra 缩放模式; 默认 none=1:1 (Sumatra 自身默认是 shrink, 会把 A4 缩到 ~96%)
@@ -28,6 +28,12 @@ foreach ($cand in @((Get-Command SumatraPDF -ErrorAction SilentlyContinue).Sourc
 # 参数互斥提醒: -Scale 只作用于 Sumatra, -Dpi 只作用于 DotNet
 if ($Engine -eq "DotNet" -and $Scale -ne "none") { Write-Warning "-Scale only applies to -Engine Sumatra (ignored for DotNet)" }
 if ($Engine -eq "Sumatra" -and $PSBoundParameters.ContainsKey('Dpi')) { Write-Warning "-Dpi only applies to -Engine DotNet (Sumatra rasterizes at driver resolution)" }
+
+# Spooler 预检 — 它停着时 Get-Printer/CIM/Sumatra 全给误导性错误 ("printer not found"/
+# "no system default printer"/15s 超时), 而这是本 skill 的第一类故障, 必须最先拦
+if ((Get-Service Spooler -ErrorAction SilentlyContinue).Status -ne 'Running') {
+    throw "Spooler not running - see SKILL.md §1/§5"
+}
 
 # -Printer 不传 → 系统默认打印机
 # 注意: pwsh7 的 [PrinterSettings]::Default 静态属性是 null (.NET Core 未实现), 别用 — 走 CIM
