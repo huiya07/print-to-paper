@@ -1,10 +1,6 @@
 ---
 name: print-to-paper
-description: "打印交付全链路: Spooler/队列/PnP 三层诊断、横线纸生成(reportlab)、任意 PDF 打印双引擎(.NET 光栅/Sumatra 矢量)、GDI 直画(pywin32)、屏幕断线 vs 纸面断线的光栅化验证。2026-10-05 Brother DCP-7057 全流程实测沉淀"
-triggers:
-  - print: 打印/打印不了/print/spooler/后台打印程序/打印机不认/吐纸/打印这个PDF
-  - ruled: 横线纸/笔记本纸/分隔线/一条线一条线/ruled paper
-  - lines: 断线/线断了/打印出来缺线
+description: "Windows 11 打印交付 (需 PowerShell 7 + Python + 本地打印机)。何时用: 用户要打印 PDF/打印这个文件、打印不通/打印不了/打印机不认/后台打印程序 Spooler 问题、要生成横线纸/笔记本纸/分隔线、打印出来断线缺线时。涵盖 Spooler/队列/PnP 三层诊断、横线纸生成(reportlab)、任意 PDF 双引擎打印(.NET 光栅/Sumatra 矢量)、GDI 直画(pywin32)、屏幕断线 vs 纸面断线的光栅化定层"
 ---
 
 # 打印交付 (print-to-paper)
@@ -33,7 +29,7 @@ pnputil /enum-drivers                                          # 搜 Printer 类
 | 现象 | 根因 | 解法 |
 |---|---|---|
 | 队列在 + PnP OK | 正常 | 直接打 |
-| USB OK + 扫描(Image类) OK + **无队列** | **插拔时 Spooler 是停的** — 建队列步骤被静默跳过, WIA 扫描通道不依赖 Spooler 所以扫描认了 | 拉起 Spooler → **拔插一次 USB** → 队列自动重建 (Win11 类驱动兜底, 不用 Windows Update) |
+| USB OK + 扫描(Image类) OK + **无队列** | **插拔时 Spooler 是停的** (Win11 + 类驱动实测; 机理: 插入瞬间无 Spooler → 建队列步骤静默跳过, WIA 扫描通道不依赖 Spooler 所以扫描认了) | 拉起 Spooler → **拔插一次 USB** → 队列自动重建 (Win11 类驱动兜底, 不用 Windows Update; 其他驱动/系统未验) |
 | Get-Printer 报"无法访问后台打印程序服务" | Spooler 停 | §5 拉起 |
 
 ## 2. 生成横线纸 PDF (reportlab)
@@ -65,9 +61,11 @@ pwsh -File print_pdf.ps1 -Pdf "file.pdf" -Engine Sumatra
 
 选型: 日常/批量用默认 **DotNet** (稳, 无外部依赖); 线条图/小字要矢量质量用 **Sumatra**。两引擎均 10-05 实测出纸。
 
+**流程 (烧纸不可逆, 强制)**: 真打前**必须先 `-DryRun`** — 确认页数/份数/打印机解析无误后再去掉跑真打; 带 `-Copies` 时尤其必跑。`-Printer` 不传时取**系统默认打印机**。
+
 **工程细节 (都是踩出来的)**:
 - pwsh7 程序集名是 `System.Drawing.Common` — `System.Drawing.Printing` 不是程序集名, Add-Type 会报"找不到路径"
-- 成功信号: DotNet 引擎同步返回; Sumatra 是 GUI 进程 `&` 不等待、`$LASTEXITCODE` 为 null — **以 spooler 收到 job 为准**
+- 成功信号: DotNet 引擎同步返回; Sumatra 是 GUI 进程 `&` 不等待、`$LASTEXITCODE` 为 null — **以 spooler 收到 job 为准**: `Get-PrintJob -PrinterName <名>` 15s 内出现 job = 成功, job 消失 = 该份传完 (脚本内已按此轮询, 手动调 Sumatra 时照此判断)
 - DotNet 引擎每页 `DrawImage` 等比缩放进 MarginBounds, 纸张/单双面用驱动首选项 (A4/Duplex=False)
 
 ## 4. GDI 直画 (生成式内容直打, 不经 PDF)
@@ -79,12 +77,12 @@ python ~/.claude/skills/print-to-paper/scripts/print_lines_gdi.py --dry-run
 python ~/.claude/skills/print-to-paper/scripts/print_lines_gdi.py   # 真打
 ```
 
-pywin32 签名实况 (docstring 全 None 别猜): `dc.CreatePrinterDC("Brother DCP-7057")` 单参数 (无 `CreateDC` 方法); `dc.StartDoc("name")` 字符串即可; 笔宽 `pt/72*dpi` px (600dpi 下 0.75pt→6px)。
+pywin32 签名实况 (docstring 全 None 别猜): `dc.CreatePrinterDC(printer)` 单参数 (无 `CreateDC` 方法), printer 不传时取系统默认打印机; `dc.StartDoc("name")` 字符串即可; 笔宽 `pt/72*dpi` px (600dpi 下 0.75pt→6px)。
 ⚠️ **GDI 只适合画线/矢量图元** — 位图路线死于黑白激光 1bpp 打印 DC 不吃 24bpp 位图 (`SelectObject` 报 "Select bitmap object failed"), 打图走 §3。
 
 ## 5. Spooler 拉起 (需 Admin, 三防线)
 
-令牌没提权 (`IsInRole(Administrator)`) 别硬跑 `Start-Service` — 报"无法打开服务"。流程即三防线: 验令牌 → 脚本带 UTF-8 BOM + `[Parser]::ParseFile` 预检 → `Start-Process pwsh -Verb RunAs` 弹 UAC 后**轮询执行日志、给足确认时间, 见日志才删脚本**。
+令牌没提权 (`IsInRole(Administrator)`) 别硬跑 `Start-Service` — 报"无法打开服务"。流程: 验令牌 → 写 BOM 脚本 (`[Parser]::ParseFile` 预检) → `Start-Process pwsh -Verb RunAs` 弹 UAC → **每 2s 查一次执行日志, 最长等 60s** → 见日志才删脚本。
 
 ## 6. 断线排查: 屏幕断 ≠ 纸上断
 

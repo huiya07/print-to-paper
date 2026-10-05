@@ -9,20 +9,26 @@ import win32con
 import win32print
 import win32ui
 
-DEFAULT_PRINTER = "Brother DCP-7057"
 PAGE_W = 210.0
 PAGE_H = 297.0
 
 
 def main():
     ap = argparse.ArgumentParser(description="Draw ruled lines directly to a printer (GDI)")
-    ap.add_argument("--printer", default=DEFAULT_PRINTER, help="printer name")
+    ap.add_argument("--printer", default=None, help="printer name (default: system default printer)")
     ap.add_argument("--spacing", type=float, default=8.0, help="line spacing mm")
     ap.add_argument("--gray", type=float, default=0.5, help="line gray 0-1")
     ap.add_argument("--pt", type=float, default=0.75, help="pen width pt")
     ap.add_argument("--margin", type=float, default=15.0, help="page margin mm")
     ap.add_argument("--dry-run", action="store_true", help="print plan only, no job")
     args = ap.parse_args()
+
+    if not args.printer:
+        try:
+            args.printer = win32print.GetDefaultPrinter()
+        except Exception:
+            print("ERROR no system default printer; pass --printer", flush=True)
+            sys.exit(1)
 
     names = [p[2] for p in win32print.EnumPrinters(win32print.PRINTER_ENUM_LOCAL)]
     if args.printer not in names:

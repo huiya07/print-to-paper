@@ -3,7 +3,8 @@
 # 为什么 .NET: win32ui 位图路线死于黑白激光 1bpp 打印 DC 不吃 24bpp 位图 (2026-10-05 实测)
 param(
     [Parameter(Mandatory = $true)][string]$Pdf,
-    [string]$Printer = "Brother DCP-7057",
+    # 不传则取系统默认打印机 (2026-10-05 审计后改, Brother DCP-7057 只是实测环境示例)
+    [string]$Printer = "",
     [string]$Pages = "all",
     [int]$Copies = 1,
     [int]$Dpi = 300,
@@ -15,6 +16,13 @@ param(
 $ErrorActionPreference = "Stop"
 $py = Join-Path $PSScriptRoot "print_pdf.py"
 $SumatraExe = "$env:LOCALAPPDATA\SumatraPDF\SumatraPDF.exe"
+
+# -Printer 不传 → 系统默认打印机
+# 注意: pwsh7 的 [PrinterSettings]::Default 静态属性是 null (.NET Core 未实现), 别用 — 走 CIM
+if (-not $Printer) {
+    $Printer = (Get-CimInstance Win32_Printer -Filter "Default=TRUE" | Select-Object -First 1).Name
+    if (-not $Printer) { throw "no system default printer; pass -Printer <name>" }
+}
 
 if (-not (Test-Path $Pdf)) { throw "no such file: $Pdf" }
 
