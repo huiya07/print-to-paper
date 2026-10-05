@@ -52,7 +52,7 @@ def main():
     gray_val = max(0, min(255, int(round(args.gray * 255))))
     color = (gray_val << 16) | (gray_val << 8) | gray_val
     # dry-run can't query paper caps without a DC — estimate on A4, real print reports actual
-    n_est = int((PAGE_H - 2 * args.margin) / args.spacing + 1e-9) + 1
+    n_est = int((PAGE_H - 2 * args.margin) / args.spacing + 1e-4) + 1
     what = "calibrate-box" if args.calibrate else f"lines~{n_est}(A4 est)"
     plan = (f"printer={args.printer} {what} spacing={args.spacing}mm "
             f"gray={gray_val} pen={args.pt}pt margins={args.margin}mm single-sided(driver)")
@@ -128,7 +128,7 @@ def main():
             else:
                 # symmetric slack centering — same formula as ruled_paper.py / check_lines.py
                 avail = ph - 2 * args.margin
-                n = int(avail / args.spacing + 1e-9) + 1
+                n = int(avail / args.spacing + 1e-4) + 1
                 y = args.margin + (avail - (n - 1) * args.spacing) / 2.0
                 for _ in range(n):
                     dc.MoveTo(mmx(args.margin), mmy(y))

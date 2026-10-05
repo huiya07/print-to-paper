@@ -42,11 +42,14 @@ if (-not $Printer) {
     Write-Warning "printing to a virtual printer: $Printer (jobs go to file/dialog, not paper)"
 }
 
-if (-not (Test-Path $Pdf)) { throw "no such file: $Pdf" }
+# -LiteralPath: Test-Path treats [ ] in filenames as wildcards ("report[1].pdf" would not match)
+if (-not (Test-Path -LiteralPath $Pdf)) { throw "no such file: $Pdf" }
 
 # --- Sumatra 矢量引擎: 官方 CLI, 不经过光栅化 ---
 if ($Engine -eq "Sumatra") {
-    if (-not (Test-Path $SumatraExe)) { throw "SumatraPDF not found: $SumatraExe" }
+    # $SumatraExe is $null when the lookup chain found nothing; Test-Path $null dies under
+    # Stop preference with a binding error instead of our message — check null first
+    if (-not $SumatraExe) { throw "SumatraPDF not found (searched PATH, %LOCALAPPDATA%, %ProgramFiles%)" }
     # 页范围: Sumatra 只认 -print-settings "1-3" (源码 Print.cpp %d-%d 解析), 不认单独的 pages= 前缀;
     # -silent 已在官方 flag 清单 (gen-flags.ts), 用于压制报错弹窗;
     # 缩放: Sumatra 默认 shrink (源码 defaultScaleAdv=Shrink, A4→~96%), 显式 noscale 保证 1:1 与 DotNet 引擎一致
@@ -56,6 +59,10 @@ if ($Engine -eq "Sumatra") {
     if ($Scale -ne "none") { $settings += $Scale } else { $settings += "noscale" }
     $sumatraArgs += @("-print-settings", ($settings -join ","))
     if ($DryRun) {
+        # parity with the DotNet dry-run: verify the printer exists too
+        if (-not (Get-Printer -Name $Printer -ErrorAction SilentlyContinue)) {
+            throw "printer not found: $Printer"
+        }
         "DRY-RUN engine=Sumatra exe=$SumatraExe args=[$($sumatraArgs -join ' ')] pdf=$Pdf copies=$Copies"
         exit 0
     }

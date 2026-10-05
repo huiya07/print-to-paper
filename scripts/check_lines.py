@@ -26,7 +26,7 @@ def check_lines(path, dpi, spacing, margin):
     # same symmetric-slack formula as ruled_paper.py (mm domain + epsilon, so boundary
     # parameter combos can't drift apart by one line and false-positive MISSING)
     avail = ph_mm - 2 * margin
-    n_expected = int(avail / spacing + 1e-9) + 1
+    n_expected = int(avail / spacing + 1e-4) + 1
     slack = avail - (n_expected - 1) * spacing
     y_start = margin + slack / 2.0
     problems = []  # (kind, line_no, y_mm, detail)

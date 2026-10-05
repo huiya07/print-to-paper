@@ -59,7 +59,7 @@ pwsh -File print_pdf.ps1 -Pdf "file.pdf" -DryRun                # 只验参数+�
 pwsh -File print_pdf.ps1 -Pdf "file.pdf" -Engine Sumatra
 ```
 
-选型: 日常/批量用默认 **DotNet** (稳, 无外部依赖); 线条图/小字要矢量质量用 **Sumatra**。两引擎均 10-05 实测出纸。
+选型: 日常/批量用默认 **DotNet** (稳, 无外部依赖); 线条图/小字要矢量质量用 **Sumatra**。两引擎均实测出纸 (10-05 初版, 10-06 起的边距/缩放改动待标定页量尺确认)。
 
 **流程 (烧纸不可逆, 强制)**: 真打前**必须先 `-DryRun`** — 确认页数/份数/打印机解析无误后再去掉跑真打; 带 `-Copies` 时尤其必跑。`-Printer` 不传时取**系统默认打印机**, 默认是虚拟打印机 (Print to PDF/OneNote/XPS) 时直接报错, 显式传的只警告。
 
@@ -99,6 +99,7 @@ python ~/.claude/skills/print-to-paper/scripts/check_lines.py --pdf target.pdf
 # "all N lines present and continuous" → PDF 数据完整, 断线更可能来自渲染, 别急着改 PDF
 # "BREAKS: ..." → 线中间真断, 查生成代码
 # "MISSING: ..." → 整条线缺失, 查生成代码
+# "SHORT: ..." → 线两端没画到边距 (被截短), 查生成代码
 ```
 
 reportlab 单线段生成层不会断; 150dpi 光栅化逐线扫像素, 亮值 ≥240 且内段 ≥4px 判断。10-05 两版全绿 + 纸面完整 → 坐实渲染锅。
@@ -115,8 +116,8 @@ reportlab 单线段生成层不会断; 150dpi 光栅化逐线扫像素, 亮值 �
 | **Out-Printer** | 只打文本, 图/PDF 别用 |
 | **Sumatra `-log`** | 要 `-log -log-to-file <path>` 两参数连用; 单 `-log <path>` 时路径掉进位置参数槽 — 被当**待打印文件**报 "Couldn't open file 'xxx.log' for printing" |
 | **Sumatra `-list-printers`** | 3.6.1 不认这 flag (master 新增), 会当文件路径打开 |
-| **.NET 默认 1 英寸页边距** | `MarginBounds` 默认四边缩 25.4mm → 整页 75.8%, 8mm 行距打出 6.1mm — 脚本已 `Margins=0` 修死, 别改回 (2026-10-06 审计发现) |
-| **.NET 打印原点 OriginAtMargins** | 默认 false → Graphics 原点在**可打印区**左上非纸角, 内容右下偏 ~4mm 且右下被裁 — 脚本已设 `$true` (源码只在 true 时 Translate(-HardMargin)), 别改回 |
+| **.NET 默认 1 英寸页边距** | `MarginBounds` 默认四边缩 25.4mm → 整页 75.8%, 8mm 行距打出 6.1mm — 脚本已 `Margins=0` 修死, 别改回 (缩放依据 .NET 源码+算术推断, **待标定页实测确认**) |
+| **.NET 打印原点 OriginAtMargins** | 默认 false → Graphics 原点在**可打印区**左上非纸角, 内容右下偏 ~4mm 且右下被裁 — 脚本已设 `$true` (源码只在 true 时 Translate(-HardMargin)), 别改回 (同为**源码推断, 待标定页实测确认**) |
 
 ## 8. 依赖清单 (10-05 实测环境)
 

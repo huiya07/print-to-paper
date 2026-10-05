@@ -2,11 +2,11 @@
 
 Claude Code (Agent) 打印 skill — 把"打印"这件事交给 agent: 任意 PDF 双引擎打印、横线纸生成、Spooler/队列/PnP 三层诊断、屏幕断线 vs 纸面断线定层。全链路真机实测沉淀 (Windows 11 + Brother DCP-7057 激光打印机, 2026-10)。
 
-> A Claude Code printing skill: dual-engine PDF printing, ruled-paper generation, 3-layer print diagnosis (Spooler / queue / PnP), and screen-vs-paper line-break triage. All paths verified on real hardware.
+> A Claude Code printing skill: dual-engine PDF printing, ruled-paper generation, 3-layer print diagnosis (Spooler / queue / PnP), and screen-vs-paper line-break triage. All paths exercised on real hardware; .NET margin/origin fixes are source-derived and pending ruler calibration.
 
 ## 为什么 / Why
 
-GitHub 上的 agent 打印 skill 几乎是空白 (2026-10-05 检索: 最大办公 skill 集合 [claude-office-skills/skills](https://github.com/claude-office-skills/skills) 的 137 个 SKILL.md 中 0 个与打印相关, 全网仓库关键词+语义检索亦未见同类; 2026-10-06 复核仍为 0)。而打印链路的坑极多 — 本 skill 的 8 条踩坑档案每条都是真实排障记录:
+GitHub 上的 agent 打印 skill 几乎是空白 (2026-10-05 检索: 最大办公 skill 集合 [claude-office-skills/skills](https://github.com/claude-office-skills/skills) 的 137 个 SKILL.md 中 0 个与打印相关, 全网仓库关键词+语义检索亦未见同类; 2026-10-06 复核仍为 0)。而打印链路的坑极多 — 本 skill 的 10 条踩坑档案每条都有触发条件和结论:
 
 - `Start-Process` 的 ArgumentList **不给含空格参数加引号** → 打印机名被拆, 报"该打印机不存在"
 - Edge headless `--print-to-printer` 在用户开着浏览器时**静默吞参数**

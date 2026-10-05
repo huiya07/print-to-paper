@@ -55,10 +55,11 @@ def main():
     if args.calibrate:
         # margin box + corner crosses: ruler the box edge to paper edge -> should be --margin
         m = args.margin * mm
-        y1, y2 = m, H - m
-        c.rect(m, y1, W - m, y2)
+        # reportlab rect(x, y, width, height) — NOT corner coords (passing corners made
+        # right/top edges land exactly on the paper edge, unmeasurable)
+        c.rect(m, m, W - 2 * m, H - 2 * m)
         arm = 4 * mm  # cross arm length
-        for cx, cy in ((m, y1), (W - m, y1), (m, y2), (W - m, y2)):
+        for cx, cy in ((m, m), (W - m, m), (m, H - m), (W - m, H - m)):
             c.line(cx - arm, cy, cx + arm, cy)
             c.line(cx, cy - arm, cx, cy + arm)
         c.showPage()
@@ -70,7 +71,7 @@ def main():
     # and check_lines.py always agree on the line count (pt-division could drift by 1
     # on boundary parameter combos, e.g. margin 13.5 / spacing 10)
     avail = H_MM - 2 * args.margin
-    n = int(avail / args.spacing + 1e-9) + 1
+    n = int(avail / args.spacing + 1e-4) + 1
     slack = avail - (n - 1) * args.spacing
     top = args.margin + slack / 2.0  # distance of first line from top edge (mm)
     y = H - top * mm
