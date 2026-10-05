@@ -6,7 +6,10 @@ import argparse
 import os
 import sys
 
-import pymupdf
+try:
+    import pymupdf  # PyMuPDF >= 1.24.3
+except ImportError:  # legacy package name
+    import fitz as pymupdf
 
 
 def main():
@@ -23,11 +26,31 @@ def main():
         sys.exit(1)
 
     doc = pymupdf.open(args.pdf)
+    if doc.page_count == 0:
+        print(f"ERROR empty PDF: {args.pdf}", file=sys.stderr, flush=True)
+        sys.exit(1)
     if args.pages == "all":
         page_list = list(range(doc.page_count))
     else:
-        a, b = (args.pages.split("-") + [args.pages])[:2]
-        page_list = list(range(int(a) - 1, int(b)))
+        # strict range: reject "2-", "1,3", negatives (pymupdf would silently take
+        # the last page via index -1) and out-of-bounds before writing any PNG
+        parts = args.pages.split("-")
+        try:
+            if len(parts) == 1 and parts[0]:
+                a = b = int(parts[0])
+            elif len(parts) == 2 and parts[0] and parts[1]:
+                a, b = int(parts[0]), int(parts[1])
+            else:
+                raise ValueError
+        except ValueError:
+            print(f"ERROR bad --pages: {args.pages!r} (use '1-3', '2', or 'all')",
+                  file=sys.stderr, flush=True)
+            sys.exit(1)
+        if not (1 <= a <= b <= doc.page_count):
+            print(f"ERROR --pages {a}-{b} out of range 1-{doc.page_count}",
+                  file=sys.stderr, flush=True)
+            sys.exit(1)
+        page_list = list(range(a - 1, b))
 
     if args.dry_run:
         p0 = doc[0]

@@ -67,6 +67,7 @@ pwsh -File print_pdf.ps1 -Pdf "file.pdf" -Engine Sumatra
 - pwsh7 程序集名是 `System.Drawing.Common` — `System.Drawing.Printing` 不是程序集名, Add-Type 会报"找不到路径"
 - 成功信号: DotNet 引擎同步返回; Sumatra 是 GUI 进程 `&` 不等待、`$LASTEXITCODE` 为 null — **以 spooler 收到 job 为准**: `Get-PrintJob -PrinterName <名>` 15s 内出现 job = 成功, job 消失 = 该份传完 (脚本内已按此轮询, 手动调 Sumatra 时照此判断)
 - DotNet 引擎每页 `DrawImage` 等比缩放进 MarginBounds, 纸张/单双面用驱动首选项 (A4/Duplex=False)。**Margins 已显式置 0** — .NET 默认四边 1 英寸会把内容缩到 75.8% (8mm 行距打出 6.1mm, 2026-10-06 审计发现), 别改回去
+- 局限: Margins=0 后满版无边距 PDF 的最外 ~4mm (打印机硬边距) 会被裁 — 横线纸自带 15mm 边距不受影响; 真满版内容先自己内缩再打
 - 横向 PDF: DotNet 引擎不自动切纸方向, 横页会被压扁 — 横版用 `-Engine Sumatra` 打
 
 ## 4. GDI 直画 (生成式内容直打, 不经 PDF)

@@ -20,10 +20,15 @@ def check_lines(path, dpi, spacing, margin):
     ph_mm = page.rect.height * MM_PER_PT
     x1 = int(margin / pw_mm * w) + 5
     x2 = int((pw_mm - margin) / pw_mm * w) - 5
+    # same symmetric-slack formula as ruled_paper.py: slack centered top/bottom
+    avail = ph_mm - 2 * margin
+    n_expected = int(avail // spacing) + 1
+    slack = avail - (n_expected - 1) * spacing
+    y_start = margin + slack / 2.0
     problems = []  # (kind, line_no, y_mm, detail)
     n_lines = 0
-    y_mm = margin
-    while y_mm <= ph_mm - margin + 0.01:
+    y_mm = y_start
+    while n_lines < n_expected:
         n_lines += 1
         py = int(round(y_mm / ph_mm * h))
         rows = [s[yy * stride + x1 * n: yy * stride + x2 * n][0::n]

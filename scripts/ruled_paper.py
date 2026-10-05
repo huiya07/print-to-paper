@@ -20,25 +20,44 @@ def main():
                     help="override color as R,G,B 0-1 e.g. 0.6,0.7,0.85 (light blue)")
     args = ap.parse_args()
 
+    try:
+        gray = float(args.gray)
+        if not 0.0 <= gray <= 1.0:
+            raise ValueError
+    except ValueError:
+        ap.error("--gray must be a float 0-1 (e.g. 0.5)")
+    if args.rgb:
+        try:
+            rgb = tuple(float(x) for x in args.rgb.split(","))
+            if len(rgb) != 3 or not all(0.0 <= v <= 1.0 for v in rgb):
+                raise ValueError
+        except ValueError:
+            ap.error("--rgb must be 'R,G,B' floats 0-1 (e.g. 0.6,0.7,0.85)")
+
     W, H = A4
     c = canvas.Canvas(args.out, pagesize=A4)
     if args.rgb:
-        r, g, b = (float(x) for x in args.rgb.split(","))
-        c.setStrokeColorRGB(r, g, b)
+        c.setStrokeColorRGB(*rgb)
     else:
-        c.setStrokeColorRGB(args.gray, args.gray, args.gray)
+        c.setStrokeColorRGB(gray, gray, gray)
     c.setLineWidth(args.pt)
 
     x1, x2 = args.margin * mm, W - args.margin * mm
-    y = H - args.margin * mm
-    n = 0
-    while y >= args.margin * mm - 0.01:
+    # top/bottom symmetric: page height between margins is rarely an exact multiple of
+    # spacing (A4/15mm/8mm -> 267mm = 33*8 + 3) — center the slack instead of dropping
+    # it all at the bottom (previously top 15mm / bottom 18mm)
+    avail = H - 2 * args.margin * mm
+    n = int(avail // (args.spacing * mm)) + 1
+    slack = avail - (n - 1) * args.spacing * mm
+    top = args.margin * mm + slack / 2.0  # distance of first line from top edge
+    y = H - top
+    for _ in range(n):
         c.line(x1, y, x2, y)
-        n += 1
         y -= args.spacing * mm
     c.showPage()
     c.save()
-    print(f"OK {args.out} lines={n} spacing={args.spacing}mm gray={args.gray} pt={args.pt}")
+    print(f"OK {args.out} lines={n} spacing={args.spacing}mm gray={gray} pt={args.pt} "
+          f"top={top / mm:.1f}mm bottom={slack / 2 / mm + args.margin:.1f}mm (symmetric)")
 
 
 if __name__ == "__main__":
