@@ -61,14 +61,16 @@ pwsh -File print_pdf.ps1 -Pdf "file.pdf" -Engine Sumatra
 
 选型: 日常/批量用默认 **DotNet** (稳, 无外部依赖); 线条图/小字要矢量质量用 **Sumatra**。两引擎均 10-05 实测出纸。
 
-**流程 (烧纸不可逆, 强制)**: 真打前**必须先 `-DryRun`** — 确认页数/份数/打印机解析无误后再去掉跑真打; 带 `-Copies` 时尤其必跑。`-Printer` 不传时取**系统默认打印机**。
+**流程 (烧纸不可逆, 强制)**: 真打前**必须先 `-DryRun`** — 确认页数/份数/打印机解析无误后再去掉跑真打; 带 `-Copies` 时尤其必跑。`-Printer` 不传时取**系统默认打印机**, 默认是虚拟打印机 (Print to PDF/OneNote/XPS) 时直接报错, 显式传的只警告。
 
 **工程细节 (都是踩出来的)**:
 - pwsh7 程序集名是 `System.Drawing.Common` — `System.Drawing.Printing` 不是程序集名, Add-Type 会报"找不到路径"
-- 成功信号: DotNet 引擎同步返回; Sumatra 是 GUI 进程 `&` 不等待、`$LASTEXITCODE` 为 null — **以 spooler 收到 job 为准**: `Get-PrintJob -PrinterName <名>` 15s 内出现 job = 成功, job 消失 = 该份传完 (脚本内已按此轮询, 手动调 Sumatra 时照此判断)
+- 成功信号: DotNet 引擎同步返回; Sumatra 是 GUI 进程 `&` 不等待、`$LASTEXITCODE` 为 null — **以 spooler 收到新 job 为准**: 启动前记下当前最大 job Id, 15s 内出现 **Id 更大** 的 job = 成功, 该 job 消失 = 该份传完 (按 Id 归属, 别人排队/卡住的作业不误判)
 - DotNet 引擎每页 `DrawImage` 等比缩放进 MarginBounds, 纸张/单双面用驱动首选项 (A4/Duplex=False)。**Margins 已显式置 0** — .NET 默认四边 1 英寸会把内容缩到 75.8% (8mm 行距打出 6.1mm, 2026-10-06 审计发现), 别改回去
+- **`OriginAtMargins = $true` 也必须保留**: 默认 false 时 Graphics 原点在可打印区左上而非纸张角, 内容整体右下偏 ~4mm 硬边距、右下边缘被裁 (源码 DefaultPrintController 只在 OriginAtMargins 时 TranslateTransform(-HardMargin))
+- Sumatra 引擎脚本默认追加 `noscale` — Sumatra 自身默认 shrink 会把 A4 缩到 ~96% (8mm→7.7mm), 加 noscale 才与 DotNet 的 1:1 一致; 要缩放用 `-Scale shrink|fit|stretch`
 - 局限: Margins=0 后满版无边距 PDF 的最外 ~4mm (打印机硬边距) 会被裁 — 横线纸自带 15mm 边距不受影响; 真满版内容先自己内缩再打
-- 横向 PDF: DotNet 引擎不自动切纸方向, 横页会被压扁 — 横版用 `-Engine Sumatra` 打
+- 横向 PDF: DotNet 引擎不自动切纸方向, 横页会被压扁 — 横版用 `-Engine Sumatra` 打 (Sumatra 默认 auto-rotate)
 
 ## 4. GDI 直画 (生成式内容直打, 不经 PDF)
 
@@ -112,6 +114,7 @@ reportlab 单线段生成层不会断; 150dpi 光栅化逐线扫像素, 亮值 �
 | **Sumatra `-log`** | 要 `-log -log-to-file <path>` 两参数连用; 单 `-log <path>` 时路径掉进位置参数槽 — 被当**待打印文件**报 "Couldn't open file 'xxx.log' for printing" |
 | **Sumatra `-list-printers`** | 3.6.1 不认这 flag (master 新增), 会当文件路径打开 |
 | **.NET 默认 1 英寸页边距** | `MarginBounds` 默认四边缩 25.4mm → 整页 75.8%, 8mm 行距打出 6.1mm — 脚本已 `Margins=0` 修死, 别改回 (2026-10-06 审计发现) |
+| **.NET 打印原点 OriginAtMargins** | 默认 false → Graphics 原点在**可打印区**左上非纸角, 内容右下偏 ~4mm 且右下被裁 — 脚本已设 `$true` (源码只在 true 时 Translate(-HardMargin)), 别改回 |
 
 ## 8. 依赖清单 (10-05 实测环境)
 

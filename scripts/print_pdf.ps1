@@ -10,22 +10,27 @@ param(
     [int]$Dpi = 300,
     # DotNet = 光栅化后 System.Drawing 打 (位图, 稳); Sumatra = 矢量直打 (质量更好, 需装 SumatraPDF)
     [ValidateSet("DotNet", "Sumatra")][string]$Engine = "DotNet",
+    # Sumatra 缩放模式; 默认 none=1:1 (Sumatra 自身默认是 shrink, 会把 A4 缩到 ~96%)
+    [ValidateSet("none", "shrink", "fit", "stretch")][string]$Scale = "none",
     [switch]$DryRun
 )
 
 $ErrorActionPreference = "Stop"
 $py = Join-Path $PSScriptRoot "print_pdf.py"
 $SumatraExe = "$env:LOCALAPPDATA\SumatraPDF\SumatraPDF.exe"
+$printerExplicit = $PSBoundParameters.ContainsKey('Printer')
 
 # -Printer 不传 → 系统默认打印机
 # 注意: pwsh7 的 [PrinterSettings]::Default 静态属性是 null (.NET Core 未实现), 别用 — 走 CIM
 if (-not $Printer) {
     $Printer = (Get-CimInstance Win32_Printer -Filter "Default=TRUE" | Select-Object -First 1).Name
     if (-not $Printer) { throw "no system default printer; pass -Printer <name>" }
-}
-# 虚拟打印机照样能收 job 但不出纸, 提醒一句
-if ($Printer -match 'Print to PDF|OneNote|XPS') {
-    Write-Warning "selected printer looks virtual: $Printer (jobs will be captured to file/dialog, not paper)"
+    # 自动解析撞上虚拟打印机会卡在保存对话框/静默入文件 — 直接拦; 显式传参的尊重用户只警告
+    if ($Printer -match 'Print to PDF|OneNote|XPS') {
+        throw "system default printer is virtual: '$Printer' - pass -Printer <name> to print on paper"
+    }
+} elseif ($Printer -match 'Print to PDF|OneNote|XPS') {
+    Write-Warning "printing to a virtual printer: $Printer (jobs go to file/dialog, not paper)"
 }
 
 if (-not (Test-Path $Pdf)) { throw "no such file: $Pdf" }
@@ -34,9 +39,13 @@ if (-not (Test-Path $Pdf)) { throw "no such file: $Pdf" }
 if ($Engine -eq "Sumatra") {
     if (-not (Test-Path $SumatraExe)) { throw "SumatraPDF not found: $SumatraExe" }
     # 页范围: Sumatra 只认 -print-settings "1-3" (源码 Print.cpp %d-%d 解析), 不认单独的 pages= 前缀;
-    # -silent 已在官方 flag 清单 (gen-flags.ts), 用于压制报错弹窗
+    # -silent 已在官方 flag 清单 (gen-flags.ts), 用于压制报错弹窗;
+    # 缩放: Sumatra 默认 shrink (源码 defaultScaleAdv=Shrink, A4→~96%), 显式 noscale 保证 1:1 与 DotNet 引擎一致
     $sumatraArgs = @("-silent", "-print-to", $Printer)
-    if ($Pages -ne "all") { $sumatraArgs += @("-print-settings", $Pages) }
+    $settings = @()
+    if ($Pages -ne "all") { $settings += $Pages }
+    if ($Scale -ne "none") { $settings += $Scale } else { $settings += "noscale" }
+    $sumatraArgs += @("-print-settings", ($settings -join ","))
     if ($DryRun) {
         "DRY-RUN engine=Sumatra exe=$SumatraExe args=[$($sumatraArgs -join ' ')] pdf=$Pdf copies=$Copies"
         exit 0
@@ -44,21 +53,25 @@ if ($Engine -eq "Sumatra") {
     # 必须用 & 调用: Start-Process 的 ArgumentList 不给含空格参数加引号,
     # "Brother DCP-7057" 会被拆成 printer='Brother' + file='DCP-7057' (2026-10-05 实测踩坑)
     # & 对 GUI 进程不等待, $LASTEXITCODE 会是 null — 成功信号 = spooler 收到 job
-    # 局限: Get-PrintJob 匹配该打印机上的任意 job (含别人排队的), 平时空队列下够用;
-    # 按 DocumentName 反而有 Sumatra 作业名不匹配的风险, 故只加超时不按名匹配
+    # job 归属: 只认 Id > 启动前最大 Id 的新作业 — 避开别人排队的/卡住的作业造成误判
     for ($i = 1; $i -le $Copies; $i++) {
+        $before = @(Get-PrintJob -PrinterName $Printer -ErrorAction SilentlyContinue)
+        $maxId = if ($before) { ($before | Measure-Object -Property Id -Maximum).Maximum } else { 0 }
         & $SumatraExe @sumatraArgs $Pdf
         $deadline = (Get-Date).AddSeconds(15)
-        $got = $false
+        $myJob = $null
         while ((Get-Date) -lt $deadline) {
-            if (Get-PrintJob -PrinterName $Printer -ErrorAction SilentlyContinue) { $got = $true; break }
+            $myJob = Get-PrintJob -PrinterName $Printer -ErrorAction SilentlyContinue |
+                Where-Object { $_.Id -gt $maxId } | Select-Object -First 1
+            if ($myJob) { break }
             Start-Sleep -Milliseconds 500
         }
-        if (-not $got) { throw "no spooler job within 15s (Sumatra likely popped an error dialog)" }
-        # 让本 job 传完再打下一份, 避免轮询抓到上一份的残影; 卡住的队列不能无限等 — 180s 超时放行
+        if (-not $myJob) { throw "no new spooler job within 15s (printer invalid / file unreadable / silent failure)" }
+        # 只等自己那个 job 传完再打下一份; 别人的卡 job 不拖累, 自己的超 180s 放行
         $drain = (Get-Date).AddSeconds(180)
-        while (Get-PrintJob -PrinterName $Printer -ErrorAction SilentlyContinue) {
-            if ((Get-Date) -gt $drain) { Write-Warning "print job still queued after 180s, continuing anyway"; break }
+        while (Get-PrintJob -PrinterName $Printer -ErrorAction SilentlyContinue |
+                Where-Object { $_.Id -eq $myJob.Id }) {
+            if ((Get-Date) -gt $drain) { Write-Warning "job $($myJob.Id) still queued after 180s, continuing anyway"; break }
             Start-Sleep -Milliseconds 400
         }
     }
@@ -68,12 +81,26 @@ if ($Engine -eq "Sumatra") {
 
 # stage 1: 光栅化 (dry-run 只看计划)
 if ($DryRun) {
-    & python $py --pdf $Pdf --out-dir (Join-Path $env:TEMP "unused") --pages $Pages --dpi $Dpi --dry-run
+    $dry = & python $py --pdf $Pdf --out-dir (Join-Path $env:TEMP "unused") --pages $Pages --dpi $Dpi --dry-run
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    $dry
     Add-Type -AssemblyName System.Drawing.Common
     $probe = New-Object System.Drawing.Printing.PrintDocument
     $probe.PrinterSettings.PrinterName = $Printer
-    "printer '$Printer' valid: $($probe.PrinterSettings.IsValid)"
+    $valid = $probe.PrinterSettings.IsValid
+    $paper = $probe.DefaultPageSettings.PaperSize
+    # 拿不到就跳过 — 输出 PaperSize + 推算 scale, 驱动纸张和 PDF 不一致时提醒
+    $paperPtW = [math]::Round($paper.Width * 72 / 100)
+    $paperPtH = [math]::Round($paper.Height * 72 / 100)
+    $scaleWarn = ""
+    if ($dry -match 'page0=(\d+)x(\d+)pt') {
+        $pdfW = [int]$Matches[1]; $pdfH = [int]$Matches[2]
+        $fitScale = [math]::Min($paperPtW / $pdfW, $paperPtH / $pdfH)
+        if ([math]::Abs($fitScale - 1.0) -gt 0.02) {
+            $scaleWarn = "  <- paper ${paperPtW}x${paperPtH}pt != pdf ${pdfW}x${pdfH}pt, scale=$([math]::Round($fitScale,3)) (content will be shrunk)"
+        }
+    }
+    "printer '$Printer' valid=$valid paper=$($paper.Kind) ${paperPtW}x${paperPtH}pt$scaleWarn"
     $probe.Dispose()
     exit 0
 }
@@ -97,6 +124,10 @@ try {
     # 8mm 行距打出 6.1mm (2026-10-06 审计发现)。置 0 后 MarginBounds == PageBounds, PDF 按原尺寸铺满。
     # 内容自带页边距 (ruled_paper 15mm), 大于打印机硬边距, 不会被裁。
     $doc.DefaultPageSettings.Margins = [System.Drawing.Printing.Margins]::new(0, 0, 0, 0)
+    # OriginAtMargins=true: DefaultPrintController 才会 TranslateTransform(-HardMargin) 把原点
+    # 从可打印区左上挪回纸张角 (源码 if (document.OriginAtMargins) 分支); 默认 false 时内容整体
+    # 右下偏 ~4mm 硬边距、右下边缘被裁 (2026-10-06 第四轮审计发现)
+    $doc.OriginAtMargins = $true
     # 队列里显示 PDF 文件名, 便于人工核对 job
     $doc.DocumentName = [System.IO.Path]::GetFileNameWithoutExtension($Pdf)
 
@@ -107,9 +138,16 @@ try {
         $img = [System.Drawing.Image]::FromFile($script:pageList[$script:pageIdx].FullName)
         try {
             $b = $e.MarginBounds
-            $scale = [Math]::Min($b.Width / $img.Width, $b.Height / $img.Height)
-            $w = [int]($img.Width * $scale)
-            $h = [int]($img.Height * $scale)
+            $fitScale = [Math]::Min($b.Width / $img.Width, $b.Height / $img.Height)
+            # 驱动默认纸张 != PDF 页尺寸时静默缩放 — 首页警告一次。
+            # $fitScale 混合了单位换算 (px→1/100in = 100/$Dpi), 只跟 unitScale 比才是真实纸张缩放
+            $unitScale = 100.0 / $Dpi
+            if (-not $script:scaleWarned -and [Math]::Abs($fitScale - $unitScale) -gt 0.02 * $unitScale) {
+                Write-Warning "content scaled $([Math]::Round($fitScale / $unitScale, 3))x - printer paper size differs from PDF page size"
+                $script:scaleWarned = $true
+            }
+            $w = [int]($img.Width * $fitScale)
+            $h = [int]($img.Height * $fitScale)
             $x = $b.X + [int](($b.Width - $w) / 2)
             $y = $b.Y + [int](($b.Height - $h) / 2)
             $e.Graphics.DrawImage($img, $x, $y, $w, $h)
