@@ -28,6 +28,10 @@ def check_lines(path, dpi, spacing, margin):
         print(f"ERROR encrypted PDF (password required): {path}", file=sys.stderr, flush=True)
         doc.close()
         return 1
+    if doc.page_count == 0:
+        print(f"ERROR empty PDF: {path}", file=sys.stderr, flush=True)
+        doc.close()
+        return 1
     page = doc[0]
     pix = page.get_pixmap(matrix=pymupdf.Matrix(dpi / 72.0, dpi / 72.0))
     w, h, s, stride, n = pix.width, pix.height, pix.samples, pix.stride, pix.n
@@ -35,6 +39,13 @@ def check_lines(path, dpi, spacing, margin):
     ph_mm = page.rect.height * MM_PER_PT
     x1 = int(margin / pw_mm * w) + 5
     x2 = int((pw_mm - margin) / pw_mm * w) - 5
+    # a huge --margin collapses the scan band (x2<=x1); empty rows would report a
+    # false green "all lines continuous"
+    if x2 - x1 < 50:
+        print(f"ERROR --margin {margin}mm leaves no horizontal scan band on {pw_mm:.0f}mm page",
+              file=sys.stderr, flush=True)
+        doc.close()
+        return 1
     # same symmetric-slack formula as ruled_paper.py (mm domain + epsilon, so boundary
     # parameter combos can't drift apart by one line and false-positive MISSING)
     avail = ph_mm - 2 * margin

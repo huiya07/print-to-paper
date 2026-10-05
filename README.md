@@ -40,11 +40,11 @@ git clone https://github.com/huiya07/print-to-paper.git ~/.claude/skills/print-t
 
 ```powershell
 # 打印任意 PDF (默认 .NET 引擎, 先 dry-run 验参数)
-pwsh -File $HOME\.claude\skills\print-to-paper\scripts\print_pdf.ps1 -Pdf doc.pdf -DryRun
-pwsh -File $HOME\.claude\skills\print-to-paper\scripts\print_pdf.ps1 -Pdf doc.pdf
+pwsh -File "$HOME/.claude/skills/print-to-paper/scripts/print_pdf.ps1" -Pdf doc.pdf -DryRun
+pwsh -File "$HOME/.claude/skills/print-to-paper/scripts/print_pdf.ps1" -Pdf doc.pdf
 
 # 矢量质量
-pwsh -File $HOME\.claude\skills\print-to-paper\scripts\print_pdf.ps1 -Pdf doc.pdf -Engine Sumatra
+pwsh -File "$HOME/.claude/skills/print-to-paper/scripts/print_pdf.ps1" -Pdf doc.pdf -Engine Sumatra
 
 # 生成横线纸 (A4 8mm 行距)
 python ~/.claude/skills/print-to-paper/scripts/ruled_paper.py --out ruled.pdf

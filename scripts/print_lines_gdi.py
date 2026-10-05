@@ -62,6 +62,10 @@ def main():
     color = (gray_val << 16) | (gray_val << 8) | gray_val
     # dry-run can't query paper caps without a DC — estimate on A4, real print reports actual
     n_est = int((PAGE_H - 2 * args.margin) / args.spacing + 1e-4) + 1
+    if args.dry_run and n_est < 1 and not args.calibrate:
+        # A4 estimate is only valid in dry-run (no DC yet); real prints validate against
+        # the ACTUAL paper size after CreatePrinterDC — don't kill e.g. margin 200 on A3
+        ap.error(f"--margin {args.margin}mm leaves no room for a line on A4")
     what = "calibrate-box" if args.calibrate else f"lines~{n_est}(A4 est)"
     plan = (f"printer={args.printer} {what} spacing={args.spacing}mm "
             f"gray={gray_val} pen={args.pt}pt margins={args.margin}mm single-sided(driver)")
@@ -96,13 +100,15 @@ def main():
         def mmy(v):
             return int(round(v / 25.4 * dpi_y)) - off_y
 
-        # resolve paper size and validate margin BEFORE StartDoc — a return after
-        # StartDoc/StartPage would leave a half-open job in the spooler (blank feed)
+        # resolve paper size and validate margin BEFORE StartDoc — exiting after
+        # StartDoc/StartPage would leave a half-open job in the spooler (blank feed).
+        # sys.exit(1) so agents don't mistake the failure for success (return == rc 0);
+        # SystemExit still runs the finally below.
         pw = paper_w_mm if paper_w_mm > 1 else PAGE_W
         ph = paper_h_mm if paper_h_mm > 1 else PAGE_H
-        if ph - 2 * args.margin <= 0:
-            print(f"ERROR --margin {args.margin}mm too large for paper {ph:.0f}mm", flush=True)
-            return
+        if ph - 2 * args.margin <= 0 or pw - 2 * args.margin <= 0:
+            print(f"ERROR --margin {args.margin}mm too large for paper {pw:.0f}x{ph:.0f}mm", flush=True)
+            sys.exit(1)
 
         started = False
         try:
