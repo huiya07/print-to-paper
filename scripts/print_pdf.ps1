@@ -23,21 +23,31 @@ if (-not $Printer) {
     $Printer = (Get-CimInstance Win32_Printer -Filter "Default=TRUE" | Select-Object -First 1).Name
     if (-not $Printer) { throw "no system default printer; pass -Printer <name>" }
 }
+# 虚拟打印机照样能收 job 但不出纸, 提醒一句
+if ($Printer -match 'Print to PDF|OneNote|XPS') {
+    Write-Warning "selected printer looks virtual: $Printer (jobs will be captured to file/dialog, not paper)"
+}
 
 if (-not (Test-Path $Pdf)) { throw "no such file: $Pdf" }
 
 # --- Sumatra 矢量引擎: 官方 CLI, 不经过光栅化 ---
 if ($Engine -eq "Sumatra") {
     if (-not (Test-Path $SumatraExe)) { throw "SumatraPDF not found: $SumatraExe" }
+    # 页范围: Sumatra 只认 -print-settings "1-3" (源码 Print.cpp %d-%d 解析), 不认单独的 pages= 前缀;
+    # -silent 已在官方 flag 清单 (gen-flags.ts), 用于压制报错弹窗
+    $sumatraArgs = @("-silent", "-print-to", $Printer)
+    if ($Pages -ne "all") { $sumatraArgs += @("-print-settings", $Pages) }
     if ($DryRun) {
-        "DRY-RUN engine=Sumatra exe=$SumatraExe printer='$Printer' pdf=$Pdf"
+        "DRY-RUN engine=Sumatra exe=$SumatraExe args=[$($sumatraArgs -join ' ')] pdf=$Pdf copies=$Copies"
         exit 0
     }
     # 必须用 & 调用: Start-Process 的 ArgumentList 不给含空格参数加引号,
     # "Brother DCP-7057" 会被拆成 printer='Brother' + file='DCP-7057' (2026-10-05 实测踩坑)
     # & 对 GUI 进程不等待, $LASTEXITCODE 会是 null — 成功信号 = spooler 收到 job
+    # 局限: Get-PrintJob 匹配该打印机上的任意 job (含别人排队的), 平时空队列下够用;
+    # 按 DocumentName 反而有 Sumatra 作业名不匹配的风险, 故只加超时不按名匹配
     for ($i = 1; $i -le $Copies; $i++) {
-        & $SumatraExe -print-to $Printer $Pdf
+        & $SumatraExe @sumatraArgs $Pdf
         $deadline = (Get-Date).AddSeconds(15)
         $got = $false
         while ((Get-Date) -lt $deadline) {
@@ -45,10 +55,14 @@ if ($Engine -eq "Sumatra") {
             Start-Sleep -Milliseconds 500
         }
         if (-not $got) { throw "no spooler job within 15s (Sumatra likely popped an error dialog)" }
-        # 让本 job 传完再打下一份, 避免轮询抓到上一份的残影
-        while (Get-PrintJob -PrinterName $Printer -ErrorAction SilentlyContinue) { Start-Sleep -Milliseconds 400 }
+        # 让本 job 传完再打下一份, 避免轮询抓到上一份的残影; 卡住的队列不能无限等 — 180s 超时放行
+        $drain = (Get-Date).AddSeconds(180)
+        while (Get-PrintJob -PrinterName $Printer -ErrorAction SilentlyContinue) {
+            if ((Get-Date) -gt $drain) { Write-Warning "print job still queued after 180s, continuing anyway"; break }
+            Start-Sleep -Milliseconds 400
+        }
     }
-    "OK sumatra printed x$Copies -> $Printer"
+    "OK sumatra spooled x$Copies -> $Printer"
     exit 0
 }
 
@@ -60,6 +74,7 @@ if ($DryRun) {
     $probe = New-Object System.Drawing.Printing.PrintDocument
     $probe.PrinterSettings.PrinterName = $Printer
     "printer '$Printer' valid: $($probe.PrinterSettings.IsValid)"
+    $probe.Dispose()
     exit 0
 }
 
@@ -78,6 +93,12 @@ try {
     $doc.PrinterSettings.PrinterName = $Printer
     if (-not $doc.PrinterSettings.IsValid) { throw "invalid printer: $Printer" }
     $doc.PrinterSettings.Copies = $Copies
+    # 页边距清零: .NET 默认 1 英寸 (100 = 1/100 inch) 四边 → MarginBounds 把整页缩到 75.8%,
+    # 8mm 行距打出 6.1mm (2026-10-06 审计发现)。置 0 后 MarginBounds == PageBounds, PDF 按原尺寸铺满。
+    # 内容自带页边距 (ruled_paper 15mm), 大于打印机硬边距, 不会被裁。
+    $doc.DefaultPageSettings.Margins = [System.Drawing.Printing.Margins]::new(0, 0, 0, 0)
+    # 队列里显示 PDF 文件名, 便于人工核对 job
+    $doc.DocumentName = [System.IO.Path]::GetFileNameWithoutExtension($Pdf)
 
     $script:pageIdx = 0
     $doc.add_PrintPage({
@@ -100,7 +121,9 @@ try {
     })
 
     $doc.Print()
-    "OK printed $($script:pageList.Count) page(s) x$Copies -> $Printer"
+    $doc.Dispose()
+    # Print() 返回只代表交给 spooler, 不代表出纸完成
+    "OK spooled $($script:pageList.Count) page(s) x$Copies -> $Printer"
 } finally {
     if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue }
 }

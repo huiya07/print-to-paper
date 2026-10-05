@@ -34,7 +34,7 @@ git clone https://github.com/huiya07/print-to-paper.git ~/.claude/skills/print-t
 
 依赖: Python 3 (`pip install reportlab pymupdf pywin32`) · PowerShell 7+ · 可选 [SumatraPDF](https://www.sumatrapdfreader.org) (矢量引擎) · 打印机驱动正常 (Spooler 运行中)。
 
-默认打印机名硬编码为示例机型 (`Brother DCP-7057`), 实际使用传 `--printer` / `-Printer` 覆盖。
+默认取系统默认打印机; 用 `--printer` / `-Printer` 指定其他打印机 (实测环境为 Brother DCP-7057)。
 
 ## 快速开始 / Quick start
 

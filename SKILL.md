@@ -66,7 +66,8 @@ pwsh -File print_pdf.ps1 -Pdf "file.pdf" -Engine Sumatra
 **工程细节 (都是踩出来的)**:
 - pwsh7 程序集名是 `System.Drawing.Common` — `System.Drawing.Printing` 不是程序集名, Add-Type 会报"找不到路径"
 - 成功信号: DotNet 引擎同步返回; Sumatra 是 GUI 进程 `&` 不等待、`$LASTEXITCODE` 为 null — **以 spooler 收到 job 为准**: `Get-PrintJob -PrinterName <名>` 15s 内出现 job = 成功, job 消失 = 该份传完 (脚本内已按此轮询, 手动调 Sumatra 时照此判断)
-- DotNet 引擎每页 `DrawImage` 等比缩放进 MarginBounds, 纸张/单双面用驱动首选项 (A4/Duplex=False)
+- DotNet 引擎每页 `DrawImage` 等比缩放进 MarginBounds, 纸张/单双面用驱动首选项 (A4/Duplex=False)。**Margins 已显式置 0** — .NET 默认四边 1 英寸会把内容缩到 75.8% (8mm 行距打出 6.1mm, 2026-10-06 审计发现), 别改回去
+- 横向 PDF: DotNet 引擎不自动切纸方向, 横页会被压扁 — 横版用 `-Engine Sumatra` 打
 
 ## 4. GDI 直画 (生成式内容直打, 不经 PDF)
 
@@ -90,8 +91,9 @@ pywin32 签名实况 (docstring 全 None 别猜): `dc.CreatePrinterDC(printer)` 
 
 ```bash
 python ~/.claude/skills/print-to-paper/scripts/check_lines.py --pdf target.pdf
-# "all N lines continuous" → 数据完整, 屏幕渲染锅, 别改 PDF
-# "BREAKS: ..." → 生成层真断, 查生成代码
+# "all N lines present and continuous" → PDF 数据完整, 断线更可能来自渲染, 别急着改 PDF
+# "BREAKS: ..." → 线中间真断, 查生成代码
+# "MISSING: ..." → 整条线缺失, 查生成代码
 ```
 
 reportlab 单线段生成层不会断; 150dpi 光栅化逐线扫像素, 亮值 ≥240 且内段 ≥4px 判断。10-05 两版全绿 + 纸面完整 → 坐实渲染锅。
@@ -108,6 +110,7 @@ reportlab 单线段生成层不会断; 150dpi 光栅化逐线扫像素, 亮值 �
 | **Out-Printer** | 只打文本, 图/PDF 别用 |
 | **Sumatra `-log`** | 要 `-log -log-to-file <path>` 两参数连用; 单 `-log <path>` 时路径掉进位置参数槽 — 被当**待打印文件**报 "Couldn't open file 'xxx.log' for printing" |
 | **Sumatra `-list-printers`** | 3.6.1 不认这 flag (master 新增), 会当文件路径打开 |
+| **.NET 默认 1 英寸页边距** | `MarginBounds` 默认四边缩 25.4mm → 整页 75.8%, 8mm 行距打出 6.1mm — 脚本已 `Margins=0` 修死, 别改回 (2026-10-06 审计发现) |
 
 ## 8. 依赖清单 (10-05 实测环境)
 

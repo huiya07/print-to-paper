@@ -2,29 +2,31 @@
 # Rasterize a ruled-paper PDF and detect line gaps programmatically.
 # Purpose: decide whether "broken lines" are real (PDF data) or viewer rendering jitter.
 # 2026-10-05: old (0.78 gray/0.5pt) and new (0.5/0.75pt) both scanned clean -> rendering issue.
+# 2026-10-06 audit: fully-missing line used to pass (gap (0,w) filtered by inner) -> now flagged.
+# Single-page tool: only checks page 1 (ruled paper is generated single-page).
 import argparse
 
 import pymupdf
 
-PAGE_W_MM = 210.0
-PAGE_H_MM = 297.0
+MM_PER_PT = 25.4 / 72.0
 
 
 def check_lines(path, dpi, spacing, margin):
     doc = pymupdf.open(path)
     page = doc[0]
     pix = page.get_pixmap(matrix=pymupdf.Matrix(dpi / 72.0, dpi / 72.0))
-    w, h, s = pix.width, pix.height, pix.samples
-    stride = w * 3
-    x1 = int(margin / PAGE_W_MM * w) + 5
-    x2 = int((PAGE_W_MM - margin) / PAGE_W_MM * w) - 5
-    problems = []
-    n = 0
+    w, h, s, stride, n = pix.width, pix.height, pix.samples, pix.stride, pix.n
+    pw_mm = page.rect.width * MM_PER_PT
+    ph_mm = page.rect.height * MM_PER_PT
+    x1 = int(margin / pw_mm * w) + 5
+    x2 = int((pw_mm - margin) / pw_mm * w) - 5
+    problems = []  # (kind, line_no, y_mm, detail)
+    n_lines = 0
     y_mm = margin
-    while y_mm <= PAGE_H_MM - margin + 0.01:
-        n += 1
-        py = int(round(y_mm / PAGE_H_MM * h))
-        rows = [s[yy * stride + x1 * 3: yy * stride + x2 * 3][0::3]
+    while y_mm <= ph_mm - margin + 0.01:
+        n_lines += 1
+        py = int(round(y_mm / ph_mm * h))
+        rows = [s[yy * stride + x1 * n: yy * stride + x2 * n][0::n]
                 for yy in range(max(0, py - 2), min(h, py + 3))]
         if not rows:
             y_mm += spacing
@@ -41,22 +43,34 @@ def check_lines(path, dpi, spacing, margin):
                 gap_start = None
         if gap_start is not None and len(mins) - gap_start >= 4:
             gaps.append((gap_start, len(mins)))
-        inner = [(a, b) for a, b in gaps if a > 8 and b < len(mins) - 8]
-        if inner:
-            problems.append((n, round(y_mm, 1), inner))
+        total = len(mins)
+        missing = [g for g in gaps if g[1] - g[0] > 0.8 * total]  # whole line (nearly) gone
+        inner = [(a, b) for a, b in gaps if a > 8 and b < total - 8 and (b - a) <= 0.8 * total]
+        if missing:
+            problems.append(("MISSING", n_lines, round(y_mm, 1), missing))
+        elif inner:
+            problems.append(("GAP", n_lines, round(y_mm, 1), inner))
         y_mm += spacing
     doc.close()
     if problems:
-        print(f"BREAKS: {len(problems)}/{n} lines have inner gaps:")
-        for ln, ymm, g in problems:
-            print(f"  line#{ln} y={ymm}mm gap_px={g}")
+        miss = [p for p in problems if p[0] == "MISSING"]
+        gaps_p = [p for p in problems if p[0] == "GAP"]
+        if gaps_p:
+            print(f"BREAKS: {len(gaps_p)}/{n_lines} lines have inner gaps:")
+            for _, ln, ymm, g in gaps_p:
+                print(f"  line#{ln} y={ymm}mm gap_px={g}")
+        if miss:
+            print(f"MISSING: {len(miss)}/{n_lines} lines absent (scan band >80% blank):")
+            for _, ln, ymm, g in miss:
+                print(f"  line#{ln} y={ymm}mm white_px={g}")
         return 1
-    print(f"all {n} lines continuous - no gaps (if screen shows breaks: it's renderer jitter)")
+    print(f"all {n_lines} lines present and continuous - PDF data intact "
+          f"(if screen shows breaks, they come from rendering, not this file)")
     return 0
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Detect line gaps in a ruled-paper PDF")
+    ap = argparse.ArgumentParser(description="Detect line gaps in a ruled-paper PDF (page 1 only)")
     ap.add_argument("--pdf", required=True, help="PDF to scan")
     ap.add_argument("--dpi", type=int, default=150, help="rasterize DPI (default 150)")
     ap.add_argument("--spacing", type=float, default=8.0, help="expected line spacing mm")
