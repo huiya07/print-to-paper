@@ -2,7 +2,7 @@
 
 Claude Code (Agent) 打印 skill — 把"打印"这件事交给 agent: 任意 PDF 双引擎打印、横线纸生成、Spooler/队列/PnP 三层诊断、屏幕断线 vs 纸面断线定层。全链路真机实测沉淀 (Windows 11 + Brother DCP-7057 激光打印机, 2026-10)。
 
-> A Claude Code printing skill: dual-engine PDF printing, ruled-paper generation, 3-layer print diagnosis (Spooler / queue / PnP), and screen-vs-paper line-break triage. All paths exercised on real hardware; .NET margin/origin fixes are source-derived and pending ruler calibration.
+> A Claude Code printing skill: dual-engine PDF printing, ruled-paper generation, 3-layer print diagnosis (Spooler / queue / PnP), and screen-vs-paper line-break triage. All paths verified on real hardware: ruler calibration 2026-10-06 passed, all three engines print the margin box at 15mm on all four edges.
 
 ## 为什么 / Why
 

@@ -59,11 +59,11 @@ pwsh -File print_pdf.ps1 -Pdf "file.pdf" -DryRun                # 只验参数+�
 pwsh -File print_pdf.ps1 -Pdf "file.pdf" -Engine Sumatra
 ```
 
-选型: 日常/批量用默认 **DotNet** (稳, 无外部依赖); 线条图/小字要矢量质量用 **Sumatra**。两引擎均实测出纸 (10-05 初版, 10-06 起的边距/缩放改动待标定页量尺确认)。
+选型: 日常/批量用默认 **DotNet** (稳, 无外部依赖); 线条图/小字要矢量质量用 **Sumatra**。两引擎均实测出纸; 10-06 边距/缩放改动经标定页量尺确认 (四边 15mm)。
 
 **流程 (烧纸不可逆, 强制)**: 真打前**必须先 `-DryRun`** — 确认页数/份数/打印机解析无误后再去掉跑真打; 带 `-Copies` 时尤其必跑。`-Printer` 不传时取**系统默认打印机**, 默认是虚拟打印机 (Print to PDF/OneNote/XPS) 时直接报错, 显式传的只警告。
 
-**边距标定**: `ruled_paper.py --calibrate` (或 `print_lines_gdi.py --calibrate`) 出"距边 margin 的矩形框+四角十字"页 — 三个引擎各打一张, 量四边到框线距离应全等于 margin (默认 15mm), 一次验证全部边距/偏移/缩放链路。
+**边距标定**: `ruled_paper.py --calibrate` (或 `print_lines_gdi.py --calibrate`) 出"距边 margin 的矩形框+四角十字"页 — 三个引擎各打一张, 量四边到框线距离应全等于 margin (默认 15mm), 一次验证全部边距/偏移/缩放链路。**2026-10-06 三引擎标定实测: 框四边距纸边均 = 15mm ✓** (DotNet/Sumatra/GDI 各一张, Margins=0、OriginAtMargins、GDI v-off、Sumatra noscale 全链路通过)。
 
 **工程细节 (都是踩出来的)**:
 - pwsh7 程序集名是 `System.Drawing.Common` — `System.Drawing.Printing` 不是程序集名, Add-Type 会报"找不到路径"
@@ -116,8 +116,8 @@ reportlab 单线段生成层不会断; 150dpi 光栅化逐线扫像素, 亮值 �
 | **Out-Printer** | 只打文本, 图/PDF 别用 |
 | **Sumatra `-log`** | 要 `-log -log-to-file <path>` 两参数连用; 单 `-log <path>` 时路径掉进位置参数槽 — 被当**待打印文件**报 "Couldn't open file 'xxx.log' for printing" |
 | **Sumatra `-list-printers`** | 3.6.1 不认这 flag (master 新增), 会当文件路径打开 |
-| **.NET 默认 1 英寸页边距** | `MarginBounds` 默认四边缩 25.4mm → 整页 75.8%, 8mm 行距打出 6.1mm — 脚本已 `Margins=0` 修死, 别改回 (缩放依据 .NET 源码+算术推断, **待标定页实测确认**) |
-| **.NET 打印原点 OriginAtMargins** | 默认 false → Graphics 原点在**可打印区**左上非纸角, 内容右下偏 ~4mm 且右下被裁 — 脚本已设 `$true` (源码只在 true 时 Translate(-HardMargin)), 别改回 (同为**源码推断, 待标定页实测确认**) |
+| **.NET 默认 1 英寸页边距** | `MarginBounds` 默认四边缩 25.4mm → 整页 75.8%, 8mm 行距打出 6.1mm — 脚本已 `Margins=0` 修死, 别改回 (10-06 标定实测: 框四边 15mm ✓) |
+| **.NET 打印原点 OriginAtMargins** | 默认 false → Graphics 原点在**可打印区**左上非纸角, 内容右下偏 ~4mm 且右下被裁 — 脚本已设 `$true` (源码只在 true 时 Translate(-HardMargin)), 别改回 (10-06 标定实测: 框四边 15mm ✓) |
 
 ## 8. 依赖清单 (10-05 实测环境)
 
