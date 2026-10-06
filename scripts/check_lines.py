@@ -109,6 +109,12 @@ def check_lines(path, dpi, spacing, margin):
             print(f"MISSING: {len(miss)}/{n_lines} lines absent (scan band >80% blank):")
             for _, ln, ymm, g in miss:
                 print(f"  line#{ln} y={ymm}mm white_px={g}")
+            # heuristic: nearly EVERYTHING missing means the scan parameters are probably
+            # wrong (e.g. default spacing 8mm on a 10mm-ruled page), not that the PDF is
+            # that broken - remind before the user chases a phantom
+            if len(miss) >= 0.8 * n_lines:
+                print("  HINT: >80% of lines 'missing' - check --spacing/--margin match "
+                      "the generator's parameters before blaming the PDF")
         if shorts:
             print(f"SHORT: {len(shorts)} line end(s) do not reach the margin:")
             for kind, ln, ymm, g in shorts:
