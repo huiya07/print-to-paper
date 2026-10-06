@@ -114,7 +114,8 @@ def check_lines(path, dpi, spacing, margin):
             # that broken - remind before the user chases a phantom
             if len(miss) >= 0.8 * n_lines:
                 print("  HINT: >80% of lines 'missing' - check --spacing/--margin match "
-                      "the generator's parameters before blaming the PDF")
+                      "the generator's parameters, or the lines are too light (gray >~0.9), "
+                      "before blaming the PDF")
         if shorts:
             print(f"SHORT: {len(shorts)} line end(s) do not reach the margin:")
             for kind, ln, ymm, g in shorts:
