@@ -60,7 +60,7 @@ pwsh -File "$HOME/.claude/skills/print-to-paper/scripts/print_pdf.ps1" -Pdf "fil
 pwsh -File "$HOME/.claude/skills/print-to-paper/scripts/print_pdf.ps1" -Pdf "file.pdf" -Engine Sumatra
 ```
 
-选型: 日常/批量用默认 **DotNet** (稳, 无外部依赖); 线条图/小字要矢量质量用 **Sumatra**。两引擎均实测出纸; 10-06 边距/缩放改动经标定页量尺确认 (四边 15mm)。
+选型: 日常/批量用默认 **DotNet** (稳, 无外部依赖); 线条图/小字要矢量质量用 **Sumatra**。两引擎均实测出纸 (DotNet 含 **2 页多页** @300dpi 光栅化 2s 静默出纸, 10-06); 10-06 边距/缩放改动经标定页量尺确认 (四边 15mm)。
 
 **流程 (烧纸不可逆, 强制)**: 真打前**必须先 `-DryRun`** — 确认页数/份数/打印机解析无误后再去掉跑真打; 带 `-Copies` 时尤其必跑。`-Printer` 不传时取**系统默认打印机**, 默认是虚拟打印机 (Print to PDF/OneNote/XPS) 时直接报错, 显式传的只警告。
 
@@ -121,6 +121,7 @@ reportlab 单线段生成层不会断; 150dpi 光栅化逐线扫像素: 亮值 �
 | **.NET 默认 1 英寸页边距** | `MarginBounds` 默认四边缩 25.4mm → 整页 75.8%, 8mm 行距打出 6.1mm — 脚本已 `Margins=0` 修死, 别改回 (10-06 标定实测: 框四边 15mm ✓) |
 | **.NET 打印原点 OriginAtMargins** | 默认 false → Graphics 原点在**可打印区**左上非纸角, 内容右下偏 ~4mm 且右下被裁 — 脚本已设 `$true` (源码只在 true 时 Translate(-HardMargin)), 别改回 (10-06 标定实测: 框四边 15mm ✓) |
 | **reportlab 排中文豆腐** | emoji (`⚠️` 的 U+FE0F 变体) 和拉丁字体 (consolas 等) 无中文字形 → PDF 里画成 .notdef 方框; 中文段落用 msyh `<font>` 混排, 生成后**断言文本层无 `\x00`** 再交付 (10-06 打印概览实测踩到) |
+| **屏幕配色打黑白丢层次** | 靠色相区分的填充色转灰阶可能直接归零 — #eef3f9 斑马纹实测灰度 242 vs 纸 255, 黑白下等同消失; 填充灰阶压在 **180~210** (`gray=0.2126R+0.7152G+0.0722B`), 浅于 235 ≈ 纸色; 生成后用 `pymupdf.csGRAY` 渲一页预览先看层次再打 (10-06 真打实测) |
 
 ## 8. 依赖清单 (10-05 实测环境)
 

@@ -6,7 +6,7 @@ Claude Code (Agent) 打印 skill — 把"打印"这件事交给 agent: 任意 PD
 
 ## 为什么 / Why
 
-GitHub 上的 agent 打印 skill 几乎是空白 (2026-10-05 检索: 最大办公 skill 集合 [claude-office-skills/skills](https://github.com/claude-office-skills/skills) 的 137 个 SKILL.md 中 0 个与打印相关, 全网仓库关键词+语义检索亦未见同类; 2026-10-06 复核仍为 0)。而打印链路的坑极多 — 本 skill 的 11 条踩坑档案每条都有触发条件和结论:
+GitHub 上的 agent 打印 skill 几乎是空白 (2026-10-05 检索: 最大办公 skill 集合 [claude-office-skills/skills](https://github.com/claude-office-skills/skills) 的 137 个 SKILL.md 中 0 个与打印相关, 全网仓库关键词+语义检索亦未见同类; 2026-10-06 复核仍为 0)。而打印链路的坑极多 — 本 skill 的 12 条踩坑档案每条都有触发条件和结论:
 
 - `Start-Process` 的 ArgumentList **不给含空格参数加引号** → 打印机名被拆, 报"该打印机不存在"
 - Edge headless `--print-to-printer` 在用户开着浏览器时**静默吞参数**
@@ -24,7 +24,7 @@ GitHub 上的 agent 打印 skill 几乎是空白 (2026-10-05 检索: 最大办�
 | 横线纸生成 (行距/灰度/线宽参数化) | `scripts/ruled_paper.py` |
 | 横线直画 (GDI, 跳过 PDF 最短路径) | `scripts/print_lines_gdi.py` |
 | 断线定层 (光栅化扫描) | `scripts/check_lines.py --pdf x.pdf` |
-| 三层诊断 + 11 条踩坑档案 | [SKILL.md](SKILL.md) |
+| 三层诊断 + 12 条踩坑档案 | [SKILL.md](SKILL.md) |
 
 ## 安装 / Install
 
