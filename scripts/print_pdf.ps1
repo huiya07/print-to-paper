@@ -122,7 +122,8 @@ if ($DryRun) {
     $paperPtW = [math]::Round($paper.Width * 72 / 100)
     $paperPtH = [math]::Round($paper.Height * 72 / 100)
     $scaleWarn = ""
-    if ($dry -match 'page0=(\d+)x(\d+)pt') {
+    # "$dry" stringify: an array -match would NOT populate $Matches if python ever prints >1 line
+    if ("$dry" -match 'page0=(\d+)x(\d+)pt') {
         $pdfW = [int]$Matches[1]; $pdfH = [int]$Matches[2]
         $fitScale = [math]::Min($paperPtW / $pdfW, $paperPtH / $pdfH)
         if ([math]::Abs($fitScale - 1.0) -gt 0.02) {

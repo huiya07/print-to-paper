@@ -5,7 +5,7 @@ description: "Windows 11 打印交付 (需 PowerShell 7 + Python + 本地打印�
 
 # 打印交付 (print-to-paper)
 
-2026-10-05 实测沉淀: 横线纸生成→吐纸、任意 PDF 双引擎打印、Spooler 拉起、三层识别、渲染断线排查。
+2026-10-05~06 实测沉淀 + 8 轮交叉审计收敛: 横线纸生成→吐纸、任意 PDF 双引擎打印、Spooler 拉起、三层识别、渲染断线排查、三引擎边距标定 (四边 15mm 实测)。
 
 ---
 
@@ -84,7 +84,7 @@ python ~/.claude/skills/print-to-paper/scripts/print_lines_gdi.py --dry-run
 python ~/.claude/skills/print-to-paper/scripts/print_lines_gdi.py   # 真打
 ```
 
-pywin32 签名实况 (docstring 全 None 别猜): `dc.CreatePrinterDC(printer)` 单参数 (无 `CreateDC` 方法), printer 不传时取系统默认打印机; `dc.StartDoc("name")` 字符串即可; 笔宽 `pt/72*dpi` px (600dpi 下 0.75pt→6px)。
+pywin32 签名实况 (docstring 全 None 别猜): `dc.CreatePrinterDC(printer)` 单参数 (无 `CreateDC` 方法), printer 不传时取系统默认打印机 (虚拟默认同样直接报错, 显式 `--printer` 只警告 — 与 §3 同规则); `dc.StartDoc("name")` 字符串即可; 笔宽 `pt/72*dpi` px (600dpi 下 0.75pt→6px)。
 ⚠️ **GDI 只适合画线/矢量图元** — 位图路线死于黑白激光 1bpp 打印 DC 不吃 24bpp 位图 (`SelectObject` 报 "Select bitmap object failed"), 打图走 §3。
 
 ## 5. Spooler 拉起 (需 Admin, 三防线)
@@ -103,7 +103,7 @@ python ~/.claude/skills/print-to-paper/scripts/check_lines.py --pdf target.pdf
 # "SHORT: ..." → 线两端没画到边距 (被截短), 查生成代码
 ```
 
-reportlab 单线段生成层不会断; 150dpi 光栅化逐线扫像素, 亮值 ≥240 且内段 ≥4px 判断。10-05 两版全绿 + 纸面完整 → 坐实渲染锅。
+reportlab 单线段生成层不会断; 150dpi 光栅化逐线扫像素: 亮值 ≥240 且内段 ≥4px 判断口, 带内 >80% 空白判整线缺失, 首尾 >10px 白判截短 (三类均已用故意造断的负例 PDF 验证能报出)。10-05 两版全绿 + 纸面完整 → 坐实渲染锅。
 
 ## 7. ⚠️ 踩坑档案 (别重复踩)
 
