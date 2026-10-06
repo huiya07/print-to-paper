@@ -119,6 +119,7 @@ reportlab 单线段生成层不会断; 150dpi 光栅化逐线扫像素: 亮值 �
 | **Sumatra `-list-printers`** | 3.6.1 不认这 flag (master 新增), 会当文件路径打开 |
 | **.NET 默认 1 英寸页边距** | `MarginBounds` 默认四边缩 25.4mm → 整页 75.8%, 8mm 行距打出 6.1mm — 脚本已 `Margins=0` 修死, 别改回 (10-06 标定实测: 框四边 15mm ✓) |
 | **.NET 打印原点 OriginAtMargins** | 默认 false → Graphics 原点在**可打印区**左上非纸角, 内容右下偏 ~4mm 且右下被裁 — 脚本已设 `$true` (源码只在 true 时 Translate(-HardMargin)), 别改回 (10-06 标定实测: 框四边 15mm ✓) |
+| **reportlab 排中文豆腐** | emoji (`⚠️` 的 U+FE0F 变体) 和拉丁字体 (consolas 等) 无中文字形 → PDF 里画成 .notdef 方框; 中文段落用 msyh `<font>` 混排, 生成后**断言文本层无 `\x00`** 再交付 (10-06 打印概览实测踩到) |
 
 ## 8. 依赖清单 (10-05 实测环境)
 
