@@ -74,6 +74,7 @@ pwsh -File "$HOME/.claude/skills/print-to-paper/scripts/print_pdf.ps1" -Pdf "fil
 - Sumatra 引擎脚本默认追加 `noscale` — Sumatra 自身默认 shrink 会把 A4 缩到 ~96% (8mm→7.7mm), 加 noscale 才与 DotNet 的 1:1 一致; 要缩放用 `-Scale shrink|fit|stretch`
 - 局限: Margins=0 后满版无边距 PDF 的最外 ~4mm (打印机硬边距) 会被裁 — 横线纸自带 15mm 边距不受影响; 真满版内容先自己内缩再打
 - 横向 PDF: DotNet 引擎不自动切纸方向, 横页会被压扁 — 横版用 `-Engine Sumatra` 打 (Sumatra 默认 auto-rotate)
+- `-Copies` 已实测 (10-06 ×2): .NET 把份数交打印机驱动层 (DEVMODE), PrintPage 只按文档页调用 — 两份都出图, **不会**出现"第二份因页码游标打空而白页"的担忧
 
 ## 4. GDI 直画 (生成式内容直打, 不经 PDF)
 
