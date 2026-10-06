@@ -47,7 +47,7 @@ pwsh -File "$HOME/.claude/skills/print-to-paper/scripts/print_pdf.ps1" -Pdf doc.
 pwsh -File "$HOME/.claude/skills/print-to-paper/scripts/print_pdf.ps1" -Pdf doc.pdf -Engine Sumatra
 
 # 生成横线纸 (A4 8mm 行距)
-python ~/.claude/skills/print-to-paper/scripts/ruled_paper.py --out ruled.pdf
+python "$HOME/.claude/skills/print-to-paper/scripts/ruled_paper.py" --out ruled.pdf
 ```
 
 打印不通? 先走 [SKILL.md](SKILL.md) §1 三层诊断 — 十有八九是 Spooler 停了、或插拔时 Spooler 不在导致队列没建。
