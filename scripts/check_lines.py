@@ -121,7 +121,10 @@ def check_lines(path, dpi, spacing, margin):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Detect line gaps in a ruled-paper PDF (page 1 only)")
+    ap = argparse.ArgumentParser(
+        description="Detect line gaps in a ruled-paper PDF "
+                    "(page 1 only; lines must be darker than gray ~0.9 - "
+                    "near-white lines can't be told from the page)")
     ap.add_argument("--pdf", required=True, help="PDF to scan")
     ap.add_argument("--dpi", type=int, default=150, help="rasterize DPI (default 150)")
     ap.add_argument("--spacing", type=float, default=8.0, help="expected line spacing mm")

@@ -130,7 +130,7 @@ if ($DryRun) {
             $scaleWarn = "  <- paper ${paperPtW}x${paperPtH}pt != pdf ${pdfW}x${pdfH}pt, scale=$([math]::Round($fitScale,3)) (content will be shrunk)"
         }
     }
-    "printer '$Printer' valid=$valid paper=$($paper.Kind) ${paperPtW}x${paperPtH}pt$scaleWarn"
+    "printer '$Printer' valid=$valid paper=$($paper.Kind) ${paperPtW}x${paperPtH}pt copies=$Copies$scaleWarn"
     $probe.Dispose()
     exit 0
 }

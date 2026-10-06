@@ -2,6 +2,7 @@
 # Ruled notebook paper PDF generator (A4, parameterized)
 # Tested defaults: --spacing 8 --gray 0.5 --pt 0.75  (2026-10-05)
 import argparse
+import os
 
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
@@ -44,6 +45,9 @@ def main():
             ap.error("--rgb must be 'R,G,B' floats 0-1 (e.g. 0.6,0.7,0.85)")
 
     W, H = A4
+    # create the output directory if needed (print_pdf.py already does makedirs)
+    out_dir = os.path.dirname(os.path.abspath(args.out))
+    os.makedirs(out_dir, exist_ok=True)
     c = canvas.Canvas(args.out, pagesize=A4)
     if args.rgb:
         c.setStrokeColorRGB(*rgb)
